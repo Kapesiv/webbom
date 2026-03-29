@@ -24,7 +24,11 @@ function parseCookies(header = "") {
         const separatorIndex = part.indexOf("=");
         const key = separatorIndex >= 0 ? part.slice(0, separatorIndex) : part;
         const value = separatorIndex >= 0 ? part.slice(separatorIndex + 1) : "";
-        return [key, decodeURIComponent(value)];
+        try {
+          return [key, decodeURIComponent(value)];
+        } catch {
+          return [key, value];
+        }
       })
   );
 }
@@ -43,6 +47,8 @@ function sanitizeUser(user) {
 export function createAuthService(database) {
   const sessionTtlDays = Math.max(1, Number(process.env.SESSION_TTL_DAYS || 30));
   const sessionMaxAgeSeconds = sessionTtlDays * 24 * 60 * 60;
+  const secureCookies =
+    process.env.NODE_ENV === "production" || String(process.env.APP_URL || "").startsWith("https://");
 
   function buildSessionCookie(token) {
     const attributes = [
@@ -50,10 +56,11 @@ export function createAuthService(database) {
       "Path=/",
       "HttpOnly",
       "SameSite=Lax",
-      `Max-Age=${sessionMaxAgeSeconds}`
+      `Max-Age=${sessionMaxAgeSeconds}`,
+      "Priority=High"
     ];
 
-    if (process.env.NODE_ENV === "production") {
+    if (secureCookies) {
       attributes.push("Secure");
     }
 
@@ -61,13 +68,20 @@ export function createAuthService(database) {
   }
 
   function buildClearSessionCookie() {
-    return [
+    const attributes = [
       `${SESSION_COOKIE_NAME}=`,
       "Path=/",
       "HttpOnly",
       "SameSite=Lax",
-      "Max-Age=0"
-    ].join("; ");
+      "Max-Age=0",
+      "Priority=High"
+    ];
+
+    if (secureCookies) {
+      attributes.push("Secure");
+    }
+
+    return attributes.join("; ");
   }
 
   function createSessionForUser(userId) {
