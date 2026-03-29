@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autonomous Agency App</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Autonomous Agency</p>
+          <h1>Sisaan, rakenna, julkaise, seuraa.</h1>
+          <p class="lede">Tasta kirjautuminen ja sen jalkeen varsinainen agency-nakyma.</p>
+          <div class="chip-row">
+            <span class="chip" id="ai-chip">AI: tarkistetaan...</span>
+            <span class="chip" id="stripe-chip">Stripe: tarkistetaan...</span>
+            <span class="chip" id="scheduler-chip">Ajastus: tarkistetaan...</span>
+          </div>
+        </div>
+
+        <section id="auth-view" class="auth-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Luo tili</h2>
+              <p>Luo uusi agency-tyotila paakayttajan oikeuksilla.</p>
+            </div>
+            <form id="register-form" class="stack-form">
+              <label>
+                <span>Agency name</span>
+                <input name="agencyName" placeholder="Northbound Growth" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" placeholder="owner@example.com" required />
+              </label>
+              <label>
+                <span>Password</span>
+                <input name="password" type="password" placeholder="At least 8 characters" required />
+              </label>
+              <button type="submit">Luo tyotila</button>
+            </form>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Kirjaudu</h2>
+              <p>Kirjaudu olemassa olevalla tunnuksella.</p>
+            </div>
+            <form id="login-form" class="stack-form">
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" placeholder="owner@example.com" required />
+              </label>
+              <label>
+                <span>Password</span>
+                <input name="password" type="password" placeholder="Your password" required />
+              </label>
+              <button type="submit">Kirjaudu</button>
+            </form>
+          </article>
+        </section>
+      </section>
+
+      <section id="dashboard-view" class="dashboard hidden">
+        <div class="toolbar">
+          <div>
+            <p class="eyebrow">Hallinta</p>
+            <h2 id="agency-title">Tyopoyta</h2>
+          </div>
+          <div class="toolbar-actions">
+            <button id="scheduler-button" class="ghost-button" type="button">Aja ajastus</button>
+            <button id="worker-button" class="ghost-button" type="button">Aja jono</button>
+            <button id="send-report-button" class="ghost-button" type="button">Laheta raportti</button>
+            <button id="logout-button" class="ghost-button" type="button">Kirjaudu ulos</button>
+          </div>
+        </div>
+
+        <section id="summary-grid" class="summary-grid"></section>
+        <section class="panel jobs-panel">
+          <div class="panel-head">
+            <h2>Tyojono</h2>
+            <p>Raskaammat toiminnot ajetaan taustalla.</p>
+          </div>
+          <div id="jobs-list" class="mini-list"></div>
+        </section>
+
+        <section class="workspace-grid workspace-grid-top">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Lisaa asiakas</h2>
+              <p>Luo uusi asiakas ja maarita sille sisaltorytmi.</p>
+            </div>
+            <form id="client-form" class="stack-form">
+              <label>
+                <span>Business name</span>
+                <input name="businessName" placeholder="Nordic Sauna Studio" required />
+              </label>
+
+              <label>
+                <span>Description</span>
+                <textarea
+                  name="description"
+                  rows="4"
+                  placeholder="Premium sauna design and installation for boutique hotels and high-end homes."
+                  required
+                ></textarea>
+              </label>
+
+              <label>
+                <span>Client-specific prompt</span>
+                <textarea
+                  name="customPrompt"
+                  rows="4"
+                  placeholder="Example: Keep the tone premium and Scandinavian. Prioritise hotel and luxury home buyers."
+                ></textarea>
+              </label>
+
+              <div class="inline-grid">
+                <label>
+                  <span>Plan</span>
+                  <select name="plan">
+                    <option value="starter">Starter</option>
+                    <option value="growth">Growth</option>
+                    <option value="scale">Scale</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Cadence (days)</span>
+                  <select name="generationIntervalDays">
+                    <option value="7">7</option>
+                    <option value="14">14</option>
+                    <option value="30" selected>30</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="checkbox-row">
+                <input name="autoGenerate" type="checkbox" checked />
+                <span>Generate the first marketing pack immediately</span>
+              </label>
+
+              <label class="checkbox-row">
+                <input name="scheduleEnabled" type="checkbox" checked />
+                <span>Enable recurring generation</span>
+              </label>
+
+              <button type="submit">Luo asiakas</button>
+            </form>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Tiimi</h2>
+              <p>Lisaa muita kayttajia samaan tyotilaan.</p>
+            </div>
+            <form id="team-form" class="stack-form">
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" placeholder="member@example.com" required />
+              </label>
+              <label>
+                <span>Password</span>
+                <input name="password" type="password" placeholder="Temporary password" required />
+              </label>
+              <label>
+                <span>Role</span>
+                <select name="role">
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <button type="submit">Lisaa jasen</button>
+            </form>
+            <div id="team-list" class="mini-list"></div>
+          </article>
+        </section>
+
+        <section class="workspace-grid workspace-grid-bottom">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Sahkopostiraportit</h2>
+              <p>Tallenna SMTP-asetukset raporttien lahetysta varten.</p>
+            </div>
+            <form id="report-form" class="stack-form">
+              <div class="inline-grid">
+                <label>
+                  <span>SMTP host</span>
+                  <input name="smtpHost" placeholder="smtp.resend.com" />
+                </label>
+                <label>
+                  <span>SMTP port</span>
+                  <input name="smtpPort" placeholder="587" />
+                </label>
+              </div>
+
+              <div class="inline-grid">
+                <label>
+                  <span>SMTP user</span>
+                  <input name="smtpUser" placeholder="resend" />
+                </label>
+                <label>
+                  <span>SMTP password</span>
+                  <input name="smtpPass" type="password" placeholder="SMTP password" />
+                </label>
+              </div>
+
+              <div class="inline-grid">
+                <label>
+                  <span>From email</span>
+                  <input name="fromEmail" placeholder="reports@agency.com" />
+                </label>
+                <label class="checkbox-row checkbox-row-inline">
+                  <input name="smtpSecure" type="checkbox" />
+                  <span>Use secure SMTP</span>
+                </label>
+              </div>
+
+              <label>
+                <span>Recipients</span>
+                <input name="recipients" placeholder="founder@agency.com, ops@agency.com" />
+              </label>
+
+              <button type="submit">Save report settings</button>
+            </form>
+            <div id="report-history" class="mini-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Publish config format</h2>
+              <p>Jokaiselle asiakkaalle voi lisata yhden tai useamman julkaisukohteen.</p>
+            </div>
+            <div class="docs-card">
+              <h3>WordPress config</h3>
+              <pre>{
+  "baseUrl": "https://example.com",
+  "username": "api-user",
+  "applicationPassword": "xxxx xxxx xxxx xxxx xxxx xxxx",
+  "status": "draft"
+}</pre>
+              <h3>Webflow config</h3>
+              <pre>{
+  "token": "wf_xxx",
+  "collectionId": "collection_id",
+  "titleField": "name",
+  "slugField": "slug",
+  "contentField": "post-body",
+  "excerptField": "summary",
+  "keywordField": "keyword"
+}</pre>
+            </div>
+          </article>
+        </section>
+
+        <section class="clients-section">
+          <div class="panel-head clients-head">
+            <h2>Asiakkaat</h2>
+            <p id="clients-caption">0 asiakasta ladattu</p>
+          </div>
+          <div id="clients-list" class="clients-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <div id="status-banner" class="status-banner">Ladataan...</div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

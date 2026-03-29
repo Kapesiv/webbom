@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard | Webbom</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell page-shell-dashboard">
+      <section class="dashboard-topbar">
+        <div>
+          <p class="eyebrow">Webbom</p>
+          <h1 id="agency-title">Työtila</h1>
+        </div>
+        <div class="toolbar-actions">
+          <button id="lumix-button" class="ghost-button" type="button">Avaa Lumix</button>
+          <button id="logout-button" class="ghost-button" type="button">Kirjaudu ulos</button>
+        </div>
+      </section>
+
+      <section class="dashboard-shell">
+        <aside class="client-rail">
+          <article class="panel simple-panel" data-guide="clients">
+            <div class="panel-head clients-head">
+              <div>
+                <h2>Asiakkaat</h2>
+                <p>Valitse yksi asiakas ja vie flow maaliin.</p>
+              </div>
+              <p id="clients-caption">0 asiakasta</p>
+            </div>
+            <div id="clients-list" class="client-selector"></div>
+          </article>
+
+          <details class="panel add-client-panel" data-guide="new-client">
+            <summary>Uusi asiakas</summary>
+            <form id="client-form" class="stack-form">
+              <label>
+                <span>Yrityksen nimi</span>
+                <input name="businessName" placeholder="Nordic Sauna Studio" required />
+              </label>
+              <label>
+                <span>Kuvaus</span>
+                <textarea
+                  name="description"
+                  rows="4"
+                  placeholder="Mitä yritys tekee ja kenelle."
+                  required
+                ></textarea>
+              </label>
+
+              <details class="stage-subdetails">
+                <summary>Lisää tietoja</summary>
+                <label>
+                  <span>Lisäohje</span>
+                  <textarea
+                    name="customPrompt"
+                    rows="3"
+                    placeholder="Sävy, kohderyhmä ja toivottu suunta."
+                  ></textarea>
+                </label>
+                <div class="inline-grid">
+                  <label>
+                    <span>Taso</span>
+                    <select name="plan">
+                      <option value="starter">Starter</option>
+                      <option value="growth">Growth</option>
+                      <option value="scale">Scale</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Tahti</span>
+                    <select name="generationIntervalDays">
+                      <option value="7">7 päivää</option>
+                      <option value="14">14 päivää</option>
+                      <option value="30" selected>30 päivää</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input name="autoGenerate" type="checkbox" checked />
+                  <span>Generoi heti</span>
+                </label>
+                <label class="checkbox-row">
+                  <input name="scheduleEnabled" type="checkbox" checked />
+                  <span>Pidä ajastus päällä</span>
+                </label>
+              </details>
+
+              <button type="submit">Luo asiakas</button>
+            </form>
+          </details>
+        </aside>
+
+        <section class="workflow-shell" data-guide="workflow">
+          <div id="active-client-view"></div>
+        </section>
+      </section>
+
+      <details class="panel details-panel" data-guide="more-settings">
+        <summary>Muut asetukset</summary>
+
+        <section class="ops-grid">
+          <article class="panel simple-panel simple-panel-nested">
+            <div class="panel-head">
+              <h2>Työjono</h2>
+              <p>Näet täällä taustalla ajettavat työt.</p>
+            </div>
+            <div class="quick-actions">
+              <button id="worker-button" class="ghost-button" type="button">Aja jono</button>
+              <button id="scheduler-button" class="ghost-button" type="button">Aja ajastus</button>
+              <button id="send-report-button" class="ghost-button" type="button">Lähetä raportti</button>
+            </div>
+            <div class="chip-row chip-row-soft">
+              <span class="chip" id="ai-chip">AI: tarkistetaan...</span>
+              <span class="chip" id="stripe-chip">Stripe: tarkistetaan...</span>
+              <span class="chip" id="scheduler-chip">Ajastus: tarkistetaan...</span>
+            </div>
+            <section id="summary-grid" class="summary-grid"></section>
+            <div id="jobs-list" class="mini-list"></div>
+          </article>
+
+          <article class="panel simple-panel simple-panel-nested lumix-panel">
+            <div class="panel-head">
+              <h2>Lumix taustalla</h2>
+              <p id="lumix-summary">Näet täältä miten Lumix auttaa.</p>
+            </div>
+            <div id="lumix-codex" class="mini-list"></div>
+          </article>
+        </section>
+
+        <section class="workspace-grid workspace-grid-top">
+          <article class="panel simple-panel simple-panel-nested">
+            <div class="panel-head">
+              <h2>Tiimi</h2>
+              <p>Lisää tarvittaessa muita käyttäjiä samaan tilaan.</p>
+            </div>
+            <form id="team-form" class="stack-form">
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" placeholder="member@example.com" required />
+              </label>
+              <label>
+                <span>Password</span>
+                <input name="password" type="password" placeholder="Temporary password" required />
+              </label>
+              <label>
+                <span>Role</span>
+                <select name="role">
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <button type="submit">Lisää jäsen</button>
+            </form>
+            <div id="team-list" class="mini-list"></div>
+          </article>
+
+          <article class="panel simple-panel simple-panel-nested">
+            <div class="panel-head">
+              <h2>Sähköpostiraportit</h2>
+              <p>Tallenna raporttien lähetysasetukset.</p>
+            </div>
+            <form id="report-form" class="stack-form">
+              <div class="inline-grid">
+                <label>
+                  <span>SMTP host</span>
+                  <input name="smtpHost" placeholder="smtp.resend.com" />
+                </label>
+                <label>
+                  <span>SMTP port</span>
+                  <input name="smtpPort" placeholder="587" />
+                </label>
+              </div>
+              <div class="inline-grid">
+                <label>
+                  <span>SMTP user</span>
+                  <input name="smtpUser" placeholder="resend" />
+                </label>
+                <label>
+                  <span>SMTP password</span>
+                  <input name="smtpPass" type="password" placeholder="SMTP password" />
+                </label>
+              </div>
+              <div class="inline-grid">
+                <label>
+                  <span>From email</span>
+                  <input name="fromEmail" placeholder="reports@agency.com" />
+                </label>
+                <label class="checkbox-row checkbox-row-inline">
+                  <input name="smtpSecure" type="checkbox" />
+                  <span>Use secure SMTP</span>
+                </label>
+              </div>
+              <label>
+                <span>Recipients</span>
+                <input name="recipients" placeholder="founder@agency.com, ops@agency.com" />
+              </label>
+              <button type="submit">Tallenna</button>
+            </form>
+            <div id="report-history" class="mini-list"></div>
+          </article>
+        </section>
+      </details>
+    </main>
+
+    <aside id="lumix-coach" class="lumix-coach"></aside>
+    <div id="status-banner" class="status-banner">Ladataan...</div>
+
+    <script type="module" src="/dashboard.js"></script>
+  </body>
+</html>

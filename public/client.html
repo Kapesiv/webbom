@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asiakassivu</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="public-shell">
+      <header class="landing-topbar public-topbar">
+        <a class="landing-brand" href="/webbom">Webbom</a>
+        <span class="chip">Julkinen sivu</span>
+      </header>
+
+      <section class="public-hero">
+        <div class="public-hero-copy">
+          <p class="eyebrow">Esittely</p>
+          <h1 id="public-title">Ladataan asiakassivua...</h1>
+          <p id="public-subtitle" class="lede"></p>
+          <div id="public-meta" class="landing-points"></div>
+        </div>
+      </section>
+
+      <section class="public-layout">
+        <article class="panel public-content-card">
+          <div id="public-site" class="generated-site"></div>
+        </article>
+
+        <aside class="public-side public-side-stack">
+          <section class="panel public-contact-card">
+            <div class="panel-head">
+              <h2>Ota yhteyttä</h2>
+              <p>Viesti menee suoraan tiimille.</p>
+            </div>
+            <form id="lead-form" class="stack-form">
+              <label>
+                <span>Nimi</span>
+                <input name="name" placeholder="Matti Meikäläinen" />
+              </label>
+              <label>
+                <span>Sähköposti</span>
+                <input name="email" type="email" placeholder="matti@example.com" required />
+              </label>
+              <label>
+                <span>Viesti</span>
+                <textarea name="message" rows="6" placeholder="Kerro mitä tarvitset." required></textarea>
+              </label>
+              <button type="submit">Lähetä viesti</button>
+            </form>
+            <p id="public-status" class="body-copy">Valmis yhteydenottoon.</p>
+          </section>
+
+          <section class="panel public-note-card">
+            <h2>Mitä seuraavaksi</h2>
+            <div class="mini-list">
+              <article class="mini-card">
+                <strong>Yhteydenotto</strong>
+                <p>Kirjoita viesti, niin tiimi näkee sen heti.</p>
+              </article>
+              <article class="mini-card">
+                <strong>Selkeä polku</strong>
+                <p>Sivu ja viestit pysyvät samassa järjestelmässä.</p>
+              </article>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>

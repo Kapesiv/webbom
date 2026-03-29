@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kirjaudu | Webbom</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="auth-shell">
+      <section class="auth-simple auth-layout">
+        <a class="auth-back-link" href="/webbom">Takaisin pääsivulle</a>
+        <p class="eyebrow">Webbom</p>
+        <h1>Kirjaudu</h1>
+        <p class="lede">Avaa työtila ja jatka siitä mihin jäit.</p>
+
+        <form id="login-form" class="stack-form auth-card auth-panel">
+          <label>
+            <span>Sähköposti</span>
+            <input name="email" type="email" placeholder="owner@example.com" required />
+          </label>
+          <label>
+            <span>Salasana</span>
+            <input name="password" type="password" placeholder="Salasana" required />
+          </label>
+          <button type="submit">Kirjaudu</button>
+        </form>
+
+        <p id="status-banner" class="auth-status" aria-live="polite"></p>
+
+        <p class="auth-link-row">
+          Ei vielä tiliä?
+          <a href="/register">Rekisteröidy</a>
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="/login.js"></script>
+  </body>
+</html>
