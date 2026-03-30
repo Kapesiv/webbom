@@ -716,6 +716,26 @@ h4 {
   justify-content: end;
 }
 
+.workflow-header-compact {
+  margin-bottom: 0;
+}
+
+.dashboard-primary-grid,
+.dashboard-secondary-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-primary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 22px;
+}
+
+.dashboard-secondary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
 .workflow-stage-stack {
   margin-top: 20px;
 }
@@ -737,11 +757,49 @@ h4 {
   background: rgba(12, 19, 30, 0.72);
 }
 
+.client-stage-card,
+.strategy-stage-card,
+.generate-stage-card,
+.preview-stage-card {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 100%;
+}
+
+.primary-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: start;
+}
+
+.primary-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: end;
+}
+
+.section-head-compact {
+  margin-bottom: 0;
+}
+
 .stage-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.stage-actions-inline {
+  margin-bottom: 0;
+}
+
+.stage-actions-inline > * {
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .strategy-core-grid {
@@ -791,6 +849,33 @@ h4 {
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.preview-main-panel,
+.preview-support-panel {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(8, 15, 24, 0.56);
+}
+
+.preview-support-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.preview-support-panel .blog-grid,
+.preview-support-panel .seo-grid {
+  margin-top: 12px;
+}
+
+.generate-stage-note {
+  margin: 0;
+}
+
+.strategy-list-inline {
+  gap: 12px;
 }
 
 .ops-compartment-grid {
@@ -1373,8 +1458,11 @@ textarea {
   .feature-grid,
   .inline-grid,
   .split-history,
+  .preview-support-grid,
   .lumix-timeline,
   .dashboard-main-grid,
+  .dashboard-primary-grid,
+  .dashboard-secondary-grid,
   .dashboard-shell,
   .ops-grid {
     grid-template-columns: 1fr;
@@ -1389,7 +1477,8 @@ textarea {
   .client-card-header,
   .clients-head,
   .section-head,
-  .workflow-header {
+  .workflow-header,
+  .primary-card-top {
     flex-direction: column;
     align-items: start;
   }
@@ -1399,6 +1488,10 @@ textarea {
   }
 
   .workflow-header-meta {
+    justify-content: start;
+  }
+
+  .primary-card-meta {
     justify-content: start;
   }
 

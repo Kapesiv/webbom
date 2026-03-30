@@ -697,25 +697,46 @@ function renderSelectOptions(options, selectedValue, placeholder) {
 }
 
 function renderIntake(client) {
+  const publishState = client.publishHistory.length ? "Julkaistu" : "Kesken";
+  const nextStep = getNextStep(client);
   const profile = client.businessProfile || {};
   const notes = profile.rawNotes?.notes || "";
   const intakeCatalog = getIntakeCatalog();
 
   return `
-    <div class="intake-frame" data-guide="intake">
-      <div class="section-head">
+    <div class="stage-card client-stage-card" data-guide="intake">
+      <div class="primary-card-top">
         <div>
-          <span class="section-kicker">Vaihe 1</span>
-          <h4>Yrityksen tiedot</h4>
+          <span class="section-kicker">Client</span>
+          <h4>${escapeHtml(client.businessName)}</h4>
+          <p class="body-copy">${escapeHtml(client.description)}</p>
         </div>
-        <p>Kirjoita perussuunta.</p>
+        <div class="primary-card-meta">
+          <span class="client-status">${escapeHtml(client.billingStatus)}</span>
+          <span class="client-status">${escapeHtml(publishState)}</span>
+        </div>
       </div>
 
-      <p class="body-copy stage-inline-note">
-        ${escapeHtml(client.businessName)}: ${escapeHtml(client.description)}
-      </p>
+      <div class="flow-strip compact-stat-strip">
+        <span class="flow-pill">Paketti ${escapeHtml(client.plan)}</span>
+        <span class="flow-pill">Rytmi ${client.generationIntervalDays} pv</span>
+        <span class="flow-pill">Liidit ${client.analytics.leadSubmits}</span>
+      </div>
 
-      <form class="stack-form intake-form" data-intake-form>
+      <div class="next-step-card">
+        <span class="section-kicker">${escapeHtml(nextStep.title)}</span>
+        <strong>${escapeHtml(nextStep.text)}</strong>
+      </div>
+
+      <div class="section-head section-head-compact">
+        <div>
+          <span class="section-kicker">Asiakastiedot</span>
+          <h5>Pidä perusrunko ajan tasalla</h5>
+        </div>
+        <p>Päivitä nämä ennen strategiaa ja generointia.</p>
+      </div>
+
+      <form class="stack-form intake-form intake-form-card" data-intake-form>
         <div class="inline-grid">
           <label>
             <span>Yritystyyppi</span>
@@ -812,43 +833,47 @@ function renderRecommendation(client) {
 
   if (!hasProfile(client)) {
     return `
-      <div class="strategy-frame stage-card-locked">
+      <div class="stage-card stage-card-locked strategy-stage-card" data-guide="recommend">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 2</span>
-            <h4>Lumixin ehdotus</h4>
+            <span class="section-kicker">Strategy</span>
+            <h4>Suunta lukittuna</h4>
           </div>
-          <p>Odottaa vaihetta 1.</p>
+          <p>Client-kortti kesken.</p>
         </div>
-        <p class="body-copy">Täydennä ensin yrityksen tiedot.</p>
+        <p class="body-copy">Täydennä ensin yrityksen tiedot, niin strategia voidaan muodostaa tähän kohtaan.</p>
       </div>
     `;
   }
 
   if (!recommendation) {
     return `
-      <div class="strategy-frame">
+      <div class="stage-card strategy-stage-card" data-guide="recommend">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 2</span>
-            <h4>Lumixin ehdotus</h4>
+            <span class="section-kicker">Strategy</span>
+            <h4>Valitse suunta</h4>
           </div>
-          <p>Pyydä yksi suunta.</p>
+          <p>Lukitse viesti ennen generointia.</p>
         </div>
-        <p class="body-copy">Lumix ehdottaa viestin, CTA:n ja sisältökulmat.</p>
-        <button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä ehdotus</button>
+
+        <p class="body-copy">Lumix ehdottaa positioningin, CTA:n ja sisältökulmat yhdellä pyynnöllä.</p>
+
+        <div class="stage-actions stage-actions-inline">
+          <button type="button" data-action="recommend" class="ghost-button">Pyydä strategia</button>
+        </div>
       </div>
     `;
   }
 
   return `
-    <div class="strategy-frame">
+    <div class="stage-card strategy-stage-card" data-guide="recommend">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 2</span>
-          <h4>Lumixin ehdotus</h4>
+          <span class="section-kicker">Strategy</span>
+          <h4>Ehdotus valmis</h4>
         </div>
-        <p>Hyväksy tämä suunta ja jatka.</p>
+        <p>Pidä tämä koko ajan näkyvissä generoinnin tukena.</p>
       </div>
 
       <div class="result-two-up strategy-core-grid">
@@ -866,26 +891,24 @@ function renderRecommendation(client) {
         </div>
       </div>
 
-      <details class="stage-subdetails">
-        <summary>Näytä koko ehdotus</summary>
-
-        <div class="strategy-list">
-          <div class="seo-item">
-            <span>Pääkohderyhmä</span>
-            <strong>${escapeHtml(recommendation.primaryAudience)}</strong>
-          </div>
-          <div class="seo-item">
-            <span>Sisältökulmat</span>
-            <strong>${escapeHtml((recommendation.contentAngles || []).join(", "))}</strong>
-          </div>
-          <div class="seo-item">
-            <span>Etusivun rakenne</span>
-            <strong>${escapeHtml((recommendation.homepageStructure || []).join(" -> "))}</strong>
-          </div>
+      <div class="strategy-list strategy-list-inline">
+        <div class="seo-item">
+          <span>Pääkohderyhmä</span>
+          <strong>${escapeHtml(recommendation.primaryAudience)}</strong>
         </div>
-      </details>
+        <div class="seo-item">
+          <span>Sisältökulmat</span>
+          <strong>${escapeHtml((recommendation.contentAngles || []).join(", "))}</strong>
+        </div>
+        <div class="seo-item">
+          <span>Etusivun rakenne</span>
+          <strong>${escapeHtml((recommendation.homepageStructure || []).join(" -> "))}</strong>
+        </div>
+      </div>
 
-      <button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Päivitä ehdotus</button>
+      <div class="stage-actions stage-actions-inline">
+        <button type="button" data-action="recommend" class="ghost-button">Päivitä strategia</button>
+      </div>
     </div>
   `;
 }
@@ -994,32 +1017,30 @@ function renderLumixTimeline(client) {
 function renderGenerateStage(client) {
   if (!client.strategyRecommendation) {
     return `
-      <div class="stage-card stage-card-locked">
+      <div class="stage-card stage-card-locked generate-stage-card" data-guide="generate">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 3</span>
-            <h4>Luo sisältö</h4>
+            <span class="section-kicker">Generate</span>
+            <h4>Generointi lukittuna</h4>
           </div>
-          <p>Odottaa vaihetta 2.</p>
+          <p>Strategy puuttuu.</p>
         </div>
-        <p class="body-copy">Pyydä ensin Lumixilta ehdotus.</p>
+        <p class="body-copy">Pyydä ensin strategia, jotta generointi tapahtuu oikeaan suuntaan.</p>
       </div>
     `;
   }
 
-  const visibleBlogs = client.blogs.slice(0, 2);
-
   return `
-    <div class="stage-card">
+    <div class="stage-card generate-stage-card" data-guide="generate">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 3</span>
-          <h4>Luo sisältö</h4>
+          <span class="section-kicker">Generate</span>
+          <h4>Generoi uusi paketti</h4>
         </div>
-        <p>Tee valmis paketti.</p>
+        <p>Päivitä sivu, blogit ja SEO samalla napilla.</p>
       </div>
 
-      <div class="stage-actions">
+      <div class="stage-actions stage-actions-inline">
         <button type="button" data-action="generate" data-guide="generate">Generoi sisältö</button>
         <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa sivu</a>
       </div>
@@ -1030,16 +1051,57 @@ function renderGenerateStage(client) {
         <span class="flow-pill">SEO ${client.seo ? "valmis" : "kesken"}</span>
       </div>
 
-      <details class="stage-subdetails">
-        <summary>Näytä sivu</summary>
+      <p class="body-copy generate-stage-note">
+        ${
+          client.lastGenerationAt
+            ? `Viimeisin generointi ${formatDate(client.lastGenerationAt)}.`
+            : "Tähän syntyy ensimmäinen valmis sisältöpaketti generoinnin jälkeen."
+        }
+      </p>
+    </div>
+  `;
+}
+
+function renderPreviewStage(client) {
+  if (!hasContent(client)) {
+    return `
+      <div class="stage-card stage-card-locked preview-stage-card">
+        <div class="section-head">
+          <div>
+            <span class="section-kicker">Preview</span>
+            <h4>Esikatselu odottaa</h4>
+          </div>
+          <p>Ei sisältöä vielä.</p>
+        </div>
+        <p class="body-copy">
+          ${client.strategyRecommendation ? "Generoi ensin sisältö, niin preview aukeaa tähän suoraan." : "Tee ensin strategia ja generoi sitten sisältö."}
+        </p>
+      </div>
+    `;
+  }
+
+  const visibleBlogs = client.blogs.slice(0, 2);
+
+  return `
+    <div class="stage-card preview-stage-card">
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">Preview</span>
+          <h4>Näe mitä asiakkaalle syntyi</h4>
+        </div>
+        <p>Landing page, blogit ja SEO samassa kortissa.</p>
+      </div>
+
+      <div class="preview-main-panel">
+        <span class="section-kicker">Landing page</span>
         <div class="site-frame stage-preview-frame">
           <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
         </div>
-      </details>
+      </div>
 
-      <details class="stage-subdetails">
-        <summary>Näytä blogit</summary>
-        <div class="blog-frame stage-preview-frame">
+      <div class="preview-support-grid">
+        <div class="preview-support-panel">
+          <span class="section-kicker">Blogit</span>
           <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
           ${
             client.blogs.length > visibleBlogs.length
@@ -1047,14 +1109,11 @@ function renderGenerateStage(client) {
               : ""
           }
         </div>
-      </details>
-
-      <details class="stage-subdetails">
-        <summary>Näytä SEO</summary>
-        <div class="seo-frame stage-preview-frame">
+        <div class="preview-support-panel">
+          <span class="section-kicker">SEO</span>
           ${renderSeo(client.seo)}
         </div>
-      </details>
+      </div>
     </div>
   `;
 }
@@ -1380,55 +1439,24 @@ function renderClientSelector(clients) {
 }
 
 function renderActiveClient(client) {
-  const publishState = client.publishHistory.length ? "Julkaistu" : "Kesken";
-  const nextStep = getNextStep(client);
-
   activeClientView.innerHTML = `
     <article class="panel workflow-card" data-client-id="${client.id}">
-      <div class="workflow-header">
+      <div class="workflow-header workflow-header-compact">
         <div>
           <span class="section-kicker">Aktiivinen asiakas</span>
-          <h2>${escapeHtml(client.businessName)}</h2>
-          <p class="body-copy">${escapeHtml(client.description)}</p>
-        </div>
-        <div class="workflow-header-meta">
-          <span class="client-status">${escapeHtml(client.billingStatus)}</span>
-          <span class="client-status">${escapeHtml(publishState)}</span>
+          <h2>Client, Strategy, Generate, Preview</h2>
+          <p class="body-copy">Pidä tärkein työ näkyvissä yhdessä näkymässä. Publish ja liidit jäävät tämän alle.</p>
         </div>
       </div>
 
-      <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Paketti ${escapeHtml(client.plan)}</span>
-        <span class="flow-pill">Rytmi ${client.generationIntervalDays} pv</span>
-        <span class="flow-pill">Liidit ${client.analytics.leadSubmits}</span>
-      </div>
-
-      <div class="next-step-card">
-        <span class="section-kicker">${escapeHtml(nextStep.title)}</span>
-        <strong>${escapeHtml(nextStep.text)}</strong>
-      </div>
-
-      <div class="client-meta workflow-meta-grid">
-        <div class="meta-box">
-          <strong>Näytöt</strong>
-          <p>${client.analytics.pageViews}</p>
-        </div>
-        <div class="meta-box">
-          <strong>CTA-klikit</strong>
-          <p>${client.analytics.ctaClicks}</p>
-        </div>
-        <div class="meta-box">
-          <strong>Julkaisu</strong>
-          <p>${escapeHtml(publishState)}</p>
-        </div>
-      </div>
-
-      ${renderLumixTimeline(client)}
-
-      <div class="workflow-stage-stack">
+      <div class="dashboard-primary-grid">
         ${renderIntake(client)}
         ${renderRecommendation(client)}
         ${renderGenerateStage(client)}
+        ${renderPreviewStage(client)}
+      </div>
+
+      <div class="dashboard-secondary-grid">
         ${renderPublishStage(client)}
         ${renderLeadsStage(client)}
       </div>
