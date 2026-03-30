@@ -16,7 +16,7 @@ const lumixOntologyModel = {
     {
       id: "business_profile",
       label: "Business Profile",
-      summary: "Rakenteinen liiketoimintaprofiili, joka kuvaa yritystyypin, yleisön, tavoitteen ja CTA:n.",
+      summary: "Yhteensopivuusobjekti, joka kokoaa intake-vastaukset yhteen ennen kuin ne jaetaan erillisiksi päätösobjekteiksi.",
       properties: [
         "business_type",
         "offer_type",
@@ -29,22 +29,52 @@ const lumixOntologyModel = {
       ]
     },
     {
+      id: "offer",
+      label: "Offer",
+      summary: "Mitä asiakas myy ja miten se kannattaa sanoittaa päätöksenteon pohjaksi.",
+      properties: ["offer_type", "primary_offer"]
+    },
+    {
+      id: "audience",
+      label: "Audience",
+      summary: "Kenelle asiakas myy ja missä markkinassa yleisöä palvellaan.",
+      properties: ["audience_type", "market_scope"]
+    },
+    {
+      id: "goal",
+      label: "Goal",
+      summary: "Mikä on tärkein konversiotavoite ja CTA-polku.",
+      properties: ["goal_type", "main_cta", "conversion_type"]
+    },
+    {
+      id: "brand_voice",
+      label: "Brand Voice",
+      summary: "Sävy, hintapositio ja muut viestilliset rajat.",
+      properties: ["tone_type", "price_position", "notes"]
+    },
+    {
       id: "strategy",
       label: "Strategy",
       summary: "Suositus siitä, miten yritys pitäisi asemoida, mitä pitää painottaa ja miten CTA-polku rakennetaan.",
-      properties: ["positioning", "primary_offer", "primary_audience", "cta_strategy"]
+      properties: ["status", "positioning", "primary_offer", "primary_audience", "cta_strategy"]
     },
     {
       id: "content_pack",
       label: "Content Pack",
       summary: "Generoitu sivu, SEO-paketti ja blogit, jotka seuraavat hyväksyttyä strategiaa.",
-      properties: ["website", "seo", "blogs"]
+      properties: ["status", "website", "seo", "blogs"]
     },
     {
       id: "publish_target",
       label: "Publish Target",
       summary: "Ulkoinen järjestelmä, johon sisältö julkaistaan, kuten WordPress tai Webflow.",
       properties: ["platform", "config", "status"]
+    },
+    {
+      id: "publish_run",
+      label: "Publish Run",
+      summary: "Yksi toteutunut tai epäonnistunut julkaisuajo kohteeseen.",
+      properties: ["status", "message", "created_at"]
     },
     {
       id: "lead",
@@ -59,6 +89,30 @@ const lumixOntologyModel = {
       from: "client",
       to: "business_profile",
       summary: "Client määrittelee business profilen."
+    },
+    {
+      id: "profile_defines_offer",
+      from: "business_profile",
+      to: "offer",
+      summary: "Business profile määrittää tarjottavan offer-objektin."
+    },
+    {
+      id: "profile_defines_audience",
+      from: "business_profile",
+      to: "audience",
+      summary: "Business profile määrittää yleisön."
+    },
+    {
+      id: "profile_sets_goal",
+      from: "business_profile",
+      to: "goal",
+      summary: "Business profile määrittää päätavoitteen ja CTA:n."
+    },
+    {
+      id: "profile_sets_brand_voice",
+      from: "business_profile",
+      to: "brand_voice",
+      summary: "Business profile määrittää sävyn ja hintaposition."
     },
     {
       id: "profile_informs_strategy",
@@ -77,6 +131,18 @@ const lumixOntologyModel = {
       from: "content_pack",
       to: "publish_target",
       summary: "Content pack julkaistaan yhteen tai useampaan publish targetiin."
+    },
+    {
+      id: "publish_target_has_run",
+      from: "publish_target",
+      to: "publish_run",
+      summary: "Publish targetilla on toteutuneita publish run -ajoja."
+    },
+    {
+      id: "content_pack_published_by_run",
+      from: "content_pack",
+      to: "publish_run",
+      summary: "Content packin julkaisu dokumentoidaan publish run -objektina."
     },
     {
       id: "client_generates_leads",
@@ -246,6 +312,14 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function hasValue(value) {
+  return !(value === null || value === undefined || value === "");
+}
+
+function hasAnyValue(values) {
+  return values.some(hasValue);
+}
+
 function createObject(type, key, label, properties = {}) {
   return {
     id: `${type}:${key}`,
@@ -265,10 +339,26 @@ function createLink(type, from, to) {
 }
 
 function indexObjects(all) {
+  const byType = {};
+  const byTypeList = {};
+
+  all.forEach((item) => {
+    if (!byType[item.type]) {
+      byType[item.type] = item;
+    }
+
+    if (!byTypeList[item.type]) {
+      byTypeList[item.type] = [];
+    }
+
+    byTypeList[item.type].push(item);
+  });
+
   return {
     all,
     byId: Object.fromEntries(all.map((item) => [item.id, item])),
-    byType: Object.fromEntries(all.map((item) => [item.type, item]))
+    byType,
+    byTypeList
   };
 }
 
@@ -341,6 +431,11 @@ export function resolveLumixObjects({
     notes: businessProfile?.rawNotes?.notes || null
   };
 
+  const strategyStatus = strategyRecommendation?.status || (strategyRecommendation ? "approved" : "missing");
+  const hasGeneratedContent = Boolean(client.website || client.seo || client.blogs?.length);
+  const hasSuccessfulPublish = ensureArray(client.publishHistory).some((run) => run.status === "success");
+  const contentPackStatus = !hasGeneratedContent ? "empty" : hasSuccessfulPublish ? "published" : "generated";
+
   const objects = [];
   const clientObject = createObject("client", client.id || client.businessName || "draft", client.businessName, {
     businessName: client.businessName,
@@ -358,9 +453,48 @@ export function resolveLumixObjects({
   );
   objects.push(businessProfileObject);
 
+  if (hasValue(resolvedProfile.offerType)) {
+    objects.push(
+      createObject("offer", client.id || client.businessName || "draft", `${client.businessName} offer`, {
+        offerType: resolvedProfile.offerType,
+        primaryOffer: strategyRecommendation?.primaryOffer || null
+      })
+    );
+  }
+
+  if (hasAnyValue([resolvedProfile.audienceType, resolvedProfile.geoFocus])) {
+    objects.push(
+      createObject("audience", client.id || client.businessName || "draft", `${client.businessName} audience`, {
+        audienceType: resolvedProfile.audienceType,
+        marketScope: resolvedProfile.geoFocus
+      })
+    );
+  }
+
+  if (hasAnyValue([resolvedProfile.goalType, resolvedProfile.mainCta])) {
+    objects.push(
+      createObject("goal", client.id || client.businessName || "draft", `${client.businessName} goal`, {
+        goalType: resolvedProfile.goalType,
+        mainCta: resolvedProfile.mainCta,
+        conversionType: resolvedProfile.goalType
+      })
+    );
+  }
+
+  if (hasAnyValue([resolvedProfile.toneType, resolvedProfile.pricePosition, resolvedProfile.notes])) {
+    objects.push(
+      createObject("brand_voice", client.id || client.businessName || "draft", `${client.businessName} brand voice`, {
+        toneType: resolvedProfile.toneType,
+        pricePosition: resolvedProfile.pricePosition,
+        notes: resolvedProfile.notes
+      })
+    );
+  }
+
   if (strategyRecommendation) {
     objects.push(
       createObject("strategy", client.id || client.businessName || "draft", `${client.businessName} strategy`, {
+        status: strategyStatus,
         positioning: strategyRecommendation.positioning,
         primaryOffer: strategyRecommendation.primaryOffer,
         primaryAudience: strategyRecommendation.primaryAudience,
@@ -374,6 +508,7 @@ export function resolveLumixObjects({
   if (client.website || client.seo || client.blogs?.length) {
     objects.push(
       createObject("content_pack", client.id || client.businessName || "draft", `${client.businessName} content`, {
+        status: contentPackStatus,
         hasWebsite: Boolean(client.website),
         hasSeo: Boolean(client.seo),
         blogCount: ensureArray(client.blogs).length
@@ -384,9 +519,21 @@ export function resolveLumixObjects({
   ensureArray(client.publishTargets).forEach((target) => {
     objects.push(
       createObject("publish_target", target.id, target.name || target.platform, {
+        targetId: target.id,
         platform: target.platform,
         status: target.status,
         autoPublish: Boolean(target.autoPublish)
+      })
+    );
+  });
+
+  ensureArray(client.publishHistory).forEach((run) => {
+    objects.push(
+      createObject("publish_run", run.id, `publish run ${run.id}`, {
+        publishTargetId: run.publishTargetId,
+        status: run.status,
+        message: run.message,
+        createdAt: run.createdAt
       })
     );
   });
@@ -412,11 +559,31 @@ export function resolveLumixLinks(objects) {
   const links = [];
   const clientObject = objects.byType.client;
   const businessProfileObject = objects.byType.business_profile;
+  const offerObject = objects.byType.offer;
+  const audienceObject = objects.byType.audience;
+  const goalObject = objects.byType.goal;
+  const brandVoiceObject = objects.byType.brand_voice;
   const strategyObject = objects.byType.strategy;
   const contentPackObject = objects.byType.content_pack;
 
   if (clientObject && businessProfileObject) {
     links.push(createLink("client_has_profile", clientObject.id, businessProfileObject.id));
+  }
+
+  if (businessProfileObject && offerObject) {
+    links.push(createLink("profile_defines_offer", businessProfileObject.id, offerObject.id));
+  }
+
+  if (businessProfileObject && audienceObject) {
+    links.push(createLink("profile_defines_audience", businessProfileObject.id, audienceObject.id));
+  }
+
+  if (businessProfileObject && goalObject) {
+    links.push(createLink("profile_sets_goal", businessProfileObject.id, goalObject.id));
+  }
+
+  if (businessProfileObject && brandVoiceObject) {
+    links.push(createLink("profile_sets_brand_voice", businessProfileObject.id, brandVoiceObject.id));
   }
 
   if (businessProfileObject && strategyObject) {
@@ -436,6 +603,22 @@ export function resolveLumixLinks(objects) {
     });
 
   objects.all
+    .filter((item) => item.type === "publish_run")
+    .forEach((run) => {
+      const target = objects.all.find(
+        (item) => item.type === "publish_target" && String(item.properties.targetId) === String(run.properties.publishTargetId)
+      );
+
+      if (target) {
+        links.push(createLink("publish_target_has_run", target.id, run.id));
+      }
+
+      if (contentPackObject) {
+        links.push(createLink("content_pack_published_by_run", contentPackObject.id, run.id));
+      }
+    });
+
+  objects.all
     .filter((item) => item.type === "lead")
     .forEach((lead) => {
       if (clientObject) {
@@ -446,7 +629,26 @@ export function resolveLumixLinks(objects) {
   return links;
 }
 
-function recommendStrategyFromOntology({ objects, links }) {
+function buildExplanation(action, ready, reason, usedObjectIds = [], usedLinkIds = [], missingObjects = []) {
+  return {
+    action,
+    ready,
+    reason,
+    usedObjectIds,
+    usedLinkIds,
+    missingObjects
+  };
+}
+
+function getObject(objects, type) {
+  return objects.byType[type] || null;
+}
+
+function collectMissingObjects(objects, types) {
+  return types.filter((type) => !getObject(objects, type));
+}
+
+function evaluateRecommendEligibility({ objects, links }) {
   const clientObject = objects.byType.client;
   const businessProfileObject = resolveLinkedObject(
     objects,
@@ -454,17 +656,66 @@ function recommendStrategyFromOntology({ objects, links }) {
     clientObject?.id,
     "client_has_profile"
   );
+  const offerObject = getObject(objects, "offer");
+  const audienceObject = getObject(objects, "audience");
+  const goalObject = getObject(objects, "goal");
+  const missingObjects = [
+    ...collectMissingObjects(objects, ["client"]),
+    ...(!businessProfileObject ? ["business_profile"] : []),
+    ...(!offerObject ? ["offer"] : []),
+    ...(!audienceObject ? ["audience"] : []),
+    ...(!goalObject ? ["goal"] : [])
+  ];
 
-  if (!clientObject || !businessProfileObject) {
-    throw new Error("Lumix needs linked client and business profile objects to recommend a strategy.");
+  const ready = missingObjects.length === 0;
+  const reason = ready
+    ? "Lumixilla on riittävä intake-data strategian muodostamiseen."
+    : `Täydennä ensin: ${missingObjects.join(", ")}.`;
+
+  return {
+    ready,
+    reason,
+    missingObjects,
+    clientObject,
+    businessProfileObject,
+    offerObject,
+    audienceObject,
+    goalObject
+  };
+}
+
+function recommendStrategyFromOntology({ objects, links }) {
+  const eligibility = evaluateRecommendEligibility({ objects, links });
+  if (!eligibility.ready) {
+    return {
+      ready: false,
+      recommendation: null,
+      explanation: buildExplanation(
+        "recommend_strategy",
+        false,
+        eligibility.reason,
+        [eligibility.clientObject?.id, eligibility.businessProfileObject?.id].filter(Boolean),
+        links
+          .filter(
+            (link) =>
+              eligibility.clientObject &&
+              eligibility.businessProfileObject &&
+              link.type === "client_has_profile" &&
+              link.from === eligibility.clientObject.id &&
+              link.to === eligibility.businessProfileObject.id
+          )
+          .map((link) => link.id),
+        eligibility.missingObjects
+      )
+    };
   }
 
-  const profile = businessProfileObject.properties;
+  const profile = eligibility.businessProfileObject.properties;
   const businessType = profile.businessType || "b2b_service";
-  const goalType = profile.goalType || "lead_generation";
-  const audienceType = profile.audienceType || "small_businesses";
-  const offerType = profile.offerType || "service";
-  const mainCta = profile.mainCta || "Pyydä tarjous";
+  const goalType = eligibility.goalObject.properties.goalType || profile.goalType || "lead_generation";
+  const audienceType = eligibility.audienceObject.properties.audienceType || profile.audienceType || "small_businesses";
+  const offerType = eligibility.offerObject.properties.offerType || profile.offerType || "service";
+  const mainCta = eligibility.goalObject.properties.mainCta || profile.mainCta || "Pyydä tarjous";
   const playbook = getPlaybook(businessType);
 
   let ctaStrategy = `${mainCta} toimii päätavoitteena sekä sivulla että blogeissa.`;
@@ -477,32 +728,107 @@ function recommendStrategyFromOntology({ objects, links }) {
   }
 
   return {
+    ready: true,
     recommendation: {
-      positioning: `${clientObject.label} on ${playbook.positioning}.`,
-      primaryOffer: `${clientObject.label} ${getOptionLabel("offerType", offerType).toLowerCase()}`,
+      status: "approved",
+      positioning: `${eligibility.clientObject.label} on ${playbook.positioning}.`,
+      primaryOffer: `${eligibility.clientObject.label} ${getOptionLabel("offerType", offerType).toLowerCase()}`,
       primaryAudience: getOptionLabel("audienceType", audienceType).toLowerCase(),
       contentAngles: playbook.contentAngles,
       ctaStrategy,
       homepageStructure: playbook.homepageStructure
     },
-    explanation: {
-      action: "recommend_strategy",
-      usedObjectIds: [clientObject.id, businessProfileObject.id],
-      usedLinkIds: links
-        .filter(
-          (link) =>
-            link.type === "client_has_profile" &&
-            link.from === clientObject.id &&
-            link.to === businessProfileObject.id
+    explanation: buildExplanation(
+      "recommend_strategy",
+      true,
+      "Strategia voidaan muodostaa, koska offer, audience ja goal ovat olemassa.",
+      [
+        eligibility.clientObject.id,
+        eligibility.businessProfileObject.id,
+        eligibility.offerObject.id,
+        eligibility.audienceObject.id,
+        eligibility.goalObject.id
+      ],
+      links
+        .filter((link) =>
+          [
+            "client_has_profile",
+            "profile_defines_offer",
+            "profile_defines_audience",
+            "profile_sets_goal"
+          ].includes(link.type)
         )
         .map((link) => link.id)
-    }
+    )
+  };
+}
+
+function evaluateGenerateEligibility({ objects, links }) {
+  const clientObject = getObject(objects, "client");
+  const strategyObject = getObject(objects, "strategy");
+  const contentPackObject = getObject(objects, "content_pack");
+  const businessProfileObject = resolveLinkedObject(objects, links, clientObject?.id, "client_has_profile");
+  const missingObjects = [
+    ...collectMissingObjects(objects, ["client"]),
+    ...(!businessProfileObject ? ["business_profile"] : []),
+    ...collectMissingObjects(objects, ["strategy"])
+  ];
+  const strategyApproved = strategyObject?.properties?.status === "approved";
+  const ready = missingObjects.length === 0 && strategyApproved;
+  const reason =
+    missingObjects.length > 0
+      ? `Generointi odottaa objekteja: ${missingObjects.join(", ")}.`
+      : strategyApproved
+        ? "Sisällön generointi on sallittu."
+        : "Generointi odottaa hyväksyttyä strategiaa.";
+
+  return {
+    ready,
+    reason,
+    missingObjects,
+    clientObject,
+    businessProfileObject,
+    strategyObject,
+    contentPackObject
+  };
+}
+
+function evaluatePublishEligibility({ objects, links, targetId = null }) {
+  const contentPackObject = getObject(objects, "content_pack");
+  const publishTargets = objects.byTypeList.publish_target || [];
+  const activeTargets = publishTargets.filter((target) => target.properties.status === "active");
+  const selectedTargets = targetId
+    ? activeTargets.filter((target) => String(target.properties.targetId) === String(targetId))
+    : activeTargets;
+  const contentReady = contentPackObject?.properties?.status === "generated" || contentPackObject?.properties?.status === "published";
+  const missingObjects = [
+    ...(contentPackObject ? [] : ["content_pack"]),
+    ...(selectedTargets.length ? [] : ["publish_target"])
+  ];
+  const ready = Boolean(contentReady && selectedTargets.length);
+  const reason =
+    !contentPackObject
+      ? "Julkaisu odottaa generoituja sisältöjä."
+      : !contentReady
+        ? "Julkaisu odottaa valmista content packia."
+        : !selectedTargets.length
+          ? "Julkaisu odottaa aktiivista julkaisukanavaa."
+          : "Julkaisu on sallittu.";
+
+  return {
+    ready,
+    reason,
+    missingObjects,
+    contentPackObject,
+    selectedTargets,
+    links
   };
 }
 
 const lumixActionHandlers = {
   save_intake({ objects }) {
     return {
+      ready: true,
       businessProfileObject: objects.byType.business_profile
     };
   },
@@ -510,69 +836,72 @@ const lumixActionHandlers = {
     return recommendStrategyFromOntology(context);
   },
   generate_pack({ objects, links }) {
-    const clientObject = objects.byType.client;
-    const businessProfileObject = resolveLinkedObject(
-      objects,
-      links,
-      clientObject?.id,
-      "client_has_profile"
-    );
-    const strategyObject =
-      businessProfileObject &&
-      resolveLinkedObject(objects, links, businessProfileObject.id, "profile_informs_strategy");
+    const eligibility = evaluateGenerateEligibility({ objects, links });
 
     return {
-      ready: Boolean(clientObject && businessProfileObject && strategyObject),
-      explanation: {
-        action: "generate_pack",
-        usedObjectIds: [clientObject?.id, businessProfileObject?.id, strategyObject?.id].filter(Boolean),
-        usedLinkIds: links
+      ready: eligibility.ready,
+      explanation: buildExplanation(
+        "generate_pack",
+        eligibility.ready,
+        eligibility.reason,
+        [eligibility.clientObject?.id, eligibility.businessProfileObject?.id, eligibility.strategyObject?.id].filter(Boolean),
+        links
           .filter(
             (link) =>
-              (clientObject &&
-                businessProfileObject &&
+              (eligibility.clientObject &&
+                eligibility.businessProfileObject &&
                 link.type === "client_has_profile" &&
-                link.from === clientObject.id &&
-                link.to === businessProfileObject.id) ||
-              (businessProfileObject &&
-                strategyObject &&
+                link.from === eligibility.clientObject.id &&
+                link.to === eligibility.businessProfileObject.id) ||
+              (eligibility.businessProfileObject &&
+                eligibility.strategyObject &&
                 link.type === "profile_informs_strategy" &&
-                link.from === businessProfileObject.id &&
-                link.to === strategyObject.id)
+                link.from === eligibility.businessProfileObject.id &&
+                link.to === eligibility.strategyObject.id)
           )
-          .map((link) => link.id)
-      }
+          .map((link) => link.id),
+        eligibility.missingObjects
+      )
     };
   },
   publish_pack({ objects, links, targetId = null }) {
-    const contentPackObject = objects.byType.content_pack;
-    const publishTargets = objects.all.filter((item) => item.type === "publish_target");
-    const selectedTargets = targetId
-      ? publishTargets.filter((target) => String(target.properties?.targetId || target.id.split(":")[1]) === String(targetId))
-      : publishTargets;
+    const eligibility = evaluatePublishEligibility({ objects, links, targetId });
 
     return {
-      targetCount: selectedTargets.length,
-      ready: Boolean(contentPackObject && selectedTargets.length),
-      explanation: {
-        action: "publish_pack",
-        usedObjectIds: [contentPackObject?.id, ...selectedTargets.map((target) => target.id)].filter(Boolean),
-        usedLinkIds: links
+      targetCount: eligibility.selectedTargets.length,
+      ready: eligibility.ready,
+      explanation: buildExplanation(
+        "publish_pack",
+        eligibility.ready,
+        eligibility.reason,
+        [eligibility.contentPackObject?.id, ...eligibility.selectedTargets.map((target) => target.id)].filter(Boolean),
+        links
           .filter(
             (link) =>
               link.type === "content_publishes_to_target" &&
-              contentPackObject &&
-              link.from === contentPackObject.id &&
-              selectedTargets.some((target) => target.id === link.to)
+              eligibility.contentPackObject &&
+              link.from === eligibility.contentPackObject.id &&
+              eligibility.selectedTargets.some((target) => target.id === link.to)
           )
-          .map((link) => link.id)
-      }
+          .map((link) => link.id),
+        eligibility.missingObjects
+      )
     };
   },
   review_leads({ objects }) {
+    const leads = objects.byTypeList.lead || [];
     return {
+      ready: leads.length > 0,
       action: "review_leads",
-      leadCount: objects.all.filter((item) => item.type === "lead").length
+      leadCount: leads.length,
+      explanation: buildExplanation(
+        "review_leads",
+        leads.length > 0,
+        leads.length > 0 ? "Liidejä on riittävästi tarkasteluun." : "Lead review odottaa ensimmäisiä liidejä.",
+        leads.map((lead) => lead.id),
+        [],
+        leads.length > 0 ? [] : ["lead"]
+      )
     };
   }
 };
@@ -594,9 +923,132 @@ export function runLumixAction(actionId, input) {
   };
 }
 
+function getNextLumixStep(runtime) {
+  const actions = runtime.actions;
+
+  if (actions.recommend_strategy.ready && !runtime.states.strategy.exists) {
+    return {
+      title: "Tee tämä seuraavaksi",
+      text: "Pyydä Lumixilta ehdotus. Intake-objektit ovat valmiit.",
+      target: "[data-guide='recommend']",
+      actionId: "recommend_strategy"
+    };
+  }
+
+  if (actions.generate_pack.ready && runtime.states.contentPack.status === "empty") {
+    return {
+      title: "Tee tämä seuraavaksi",
+      text: "Generoi sisältö hyväksytyn strategian pohjalta.",
+      target: "[data-guide='generate']",
+      actionId: "generate_pack"
+    };
+  }
+
+  if (actions.publish_pack.ready && runtime.states.contentPack.status !== "published") {
+    return {
+      title: "Tee tämä seuraavaksi",
+      text: "Julkaise valmis sisältö aktiiviseen kanavaan.",
+      target: "[data-guide='publish']",
+      actionId: "publish_pack"
+    };
+  }
+
+  if (actions.review_leads.ready) {
+    return {
+      title: "Tämän jälkeen",
+      text: "Katso liidit ja päivitä strategiaa toimivan datan perusteella.",
+      target: "[data-guide='leads']",
+      actionId: "review_leads"
+    };
+  }
+
+  return {
+    title: "Tee tämä seuraavaksi",
+    text: actions.recommend_strategy.reason,
+    target: "[data-guide='intake']",
+    actionId: "recommend_strategy"
+  };
+}
+
+export function buildLumixRuntime(client) {
+  const input = {
+    client,
+    businessProfile: client.businessProfile,
+    intakeAnswers: client.intakeAnswers || [],
+    strategyRecommendation: client.strategyRecommendation || null
+  };
+
+  const objects = resolveLumixObjects(input);
+  const links = resolveLumixLinks(objects);
+  const recommendStrategy = runLumixAction("recommend_strategy", { ...input, objects, links });
+  const generatePack = runLumixAction("generate_pack", { ...input, objects, links });
+  const publishPack = runLumixAction("publish_pack", { ...input, objects, links });
+  const reviewLeads = runLumixAction("review_leads", { ...input, objects, links });
+  const offerObject = getObject(objects, "offer");
+  const audienceObject = getObject(objects, "audience");
+  const goalObject = getObject(objects, "goal");
+  const brandVoiceObject = getObject(objects, "brand_voice");
+  const strategyObject = getObject(objects, "strategy");
+  const contentPackObject = getObject(objects, "content_pack");
+  const publishTargets = objects.byTypeList.publish_target || [];
+  const publishRuns = objects.byTypeList.publish_run || [];
+  const leads = objects.byTypeList.lead || [];
+
+  const runtime = {
+    objectSummary: {
+      client: Boolean(getObject(objects, "client")),
+      businessProfile: Boolean(getObject(objects, "business_profile")),
+      offer: Boolean(offerObject),
+      audience: Boolean(audienceObject),
+      goal: Boolean(goalObject),
+      brandVoice: Boolean(brandVoiceObject),
+      publishTargets: publishTargets.length,
+      publishRuns: publishRuns.length,
+      leads: leads.length
+    },
+    states: {
+      strategy: {
+        exists: Boolean(strategyObject),
+        status: strategyObject?.properties?.status || "missing"
+      },
+      contentPack: {
+        exists: Boolean(contentPackObject),
+        status: contentPackObject?.properties?.status || "empty"
+      }
+    },
+    actions: {
+      recommend_strategy: {
+        ready: recommendStrategy.ready,
+        reason: recommendStrategy.explanation?.reason || "",
+        missingObjects: recommendStrategy.explanation?.missingObjects || []
+      },
+      generate_pack: {
+        ready: generatePack.ready,
+        reason: generatePack.explanation?.reason || "",
+        missingObjects: generatePack.explanation?.missingObjects || []
+      },
+      publish_pack: {
+        ready: publishPack.ready,
+        reason: publishPack.explanation?.reason || "",
+        missingObjects: publishPack.explanation?.missingObjects || []
+      },
+      review_leads: {
+        ready: reviewLeads.ready,
+        reason: reviewLeads.explanation?.reason || "",
+        missingObjects: reviewLeads.explanation?.missingObjects || []
+      }
+    }
+  };
+
+  return {
+    ...runtime,
+    nextStep: getNextLumixStep(runtime)
+  };
+}
+
 export function buildLumixContext(client) {
   const lines = [
-    `${lumixProfile.name} is the ontology-driven strategy agent inside Webbom.`,
+    `${lumixProfile.name} is the ontology-driven strategy agent inside the Lumix app.`,
     `${lumixProfile.name} should reason from the structured ontology before generating content.`
   ];
 
@@ -647,7 +1099,7 @@ export function buildLumixStrategyRecommendation(client, businessProfile, intake
 
 export function buildLumixPromptHeader() {
   return [
-    `You are ${lumixProfile.name}, the ontology-driven growth agent inside Webbom.`,
+    `You are ${lumixProfile.name}, the ontology-driven growth agent inside the Lumix app.`,
     "Your job is to turn a loose business brief into a clear, conversion-focused content package.",
     "Prefer strategic clarity, strong CTA logic, and concrete audience-language over generic marketing filler."
   ].join("\n");

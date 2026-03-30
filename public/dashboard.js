@@ -3,7 +3,8 @@ const state = {
   activeClientId: null,
   tourActive: false,
   tourStepIndex: 0,
-  tourInitialized: false
+  tourInitialized: false,
+  lumixHidden: false
 };
 
 const summaryGrid = document.getElementById("summary-grid");
@@ -22,7 +23,8 @@ const lumixButton = document.getElementById("lumix-button");
 const lumixActionState = new Map();
 const lumixAssistState = new Map();
 let guideHighlightTimeout = null;
-const lumixTourStorageKey = "webbom-lumix-tour-dismissed-v1";
+const lumixTourStorageKey = "lumix-tour-dismissed-v1";
+const lumixHiddenStorageKey = "lumix-hidden-v1";
 
 function getIntakeCatalog() {
   return (
@@ -142,6 +144,25 @@ function hasContent(client) {
   return Boolean(client.website?.html || client.blogs?.length || client.seo);
 }
 
+function getLumixRuntime(client) {
+  return (
+    client?.lumix || {
+      objectSummary: {},
+      states: {
+        strategy: { exists: Boolean(client?.strategyRecommendation), status: client?.strategyRecommendation ? "approved" : "missing" },
+        contentPack: { exists: hasContent(client), status: hasContent(client) ? "generated" : "empty" }
+      },
+      actions: {
+        recommend_strategy: { ready: false, reason: "" },
+        generate_pack: { ready: false, reason: "" },
+        publish_pack: { ready: false, reason: "" },
+        review_leads: { ready: false, reason: "" }
+      },
+      nextStep: null
+    }
+  );
+}
+
 function openAncestorDetails(element) {
   let current = element?.parentElement || null;
 
@@ -176,24 +197,22 @@ function highlightGuideTarget(selector) {
 }
 
 function getNextStep(client) {
+  const runtime = getLumixRuntime(client);
+  if (runtime.nextStep) {
+    return runtime.nextStep;
+  }
+
   if (!hasProfile(client)) {
     return {
       title: "Tee tämä seuraavaksi",
-      text: "Täydennä yrityksen tiedot ja tallenna ne."
-    };
-  }
-
-  if (!client.strategyRecommendation) {
-    return {
-      title: "Tee tämä seuraavaksi",
-      text: "Pyydä Lumixilta ehdotus ennen generointia."
+      text: "Täytä intake ja tallenna yrityksen tiedot."
     };
   }
 
   if (!hasContent(client)) {
     return {
       title: "Tee tämä seuraavaksi",
-      text: "Generoi sivu, blogit ja SEO."
+      text: "Paina Generoi kaikki. Lumix tekee strategian ja sisällön samalla."
     };
   }
 
@@ -201,8 +220,8 @@ function getNextStep(client) {
     return {
       title: "Tee tämä seuraavaksi",
       text: client.publishTargets.length
-        ? "Julkaise valmis sisältö."
-        : "Lisää ensin yksi julkaisukanava lisäasetuksista."
+        ? "Esikatsele sisältö ja julkaise valmis paketti."
+        : "Lisää ensin yksi julkaisukanava ja julkaise sitten valmis paketti."
     };
   }
 
@@ -234,24 +253,19 @@ function getTourSteps(client) {
         target: "[data-guide='intake']"
       },
       {
-        title: "Lumixin ehdotus",
-        text: "Tässä Lumix ehdottaa viestin ja rungon ennen generointia.",
-        target: "[data-guide='recommend']"
+        title: "Generoi kaikki",
+        text: "Tämä on päätoiminto. Lumix tekee strategian, sivun, blogit ja SEO:n samalla.",
+        target: "[data-guide='generate']"
       },
       {
-        title: "Luo sisältö",
-        text: "Tällä kohdalla tehdään sivu, blogit ja SEO saman suunnan alle.",
-        target: "[data-guide='generate']"
+        title: "Esikatsele sisältö",
+        text: "Täältä tarkistat sivun, blogit ja SEO:n ennen julkaisua.",
+        target: "[data-guide='preview']"
       },
       {
         title: "Julkaise",
         text: "Kun sisältö on valmis, julkaisu tehdään tästä.",
         target: "[data-guide='publish']"
-      },
-      {
-        title: "Liidit",
-        text: "Täältä näet mitä kiinnostusta sivu on kerännyt.",
-        target: "[data-guide='leads']"
       }
     );
   } else {
@@ -279,6 +293,8 @@ function finishTour() {
 }
 
 function activateLumix() {
+  state.lumixHidden = false;
+  window.localStorage.setItem(lumixHiddenStorageKey, "0");
   const activeClient = getActiveClient();
   const coach = getCoachState(activeClient);
 
@@ -381,6 +397,16 @@ function buildIntakePayloadFromClient(client, overrides = {}) {
 }
 
 function renderCoach(client) {
+  if (state.lumixHidden) {
+    lumixCoach.innerHTML = `
+      <button type="button" class="lumix-coach-toggle" data-coach-action="expand">
+        <span class="lumix-coach-avatar">L</span>
+        <span>Lumix</span>
+      </button>
+    `;
+    return;
+  }
+
   const tourSteps = getTourSteps(client);
   if (state.tourActive && tourSteps.length) {
     const currentIndex = Math.min(state.tourStepIndex, tourSteps.length - 1);
@@ -394,6 +420,7 @@ function renderCoach(client) {
             <strong>Lumix opastus</strong>
             <p>Kohta ${currentIndex + 1} / ${tourSteps.length}</p>
           </div>
+          <button type="button" class="ghost-button lumix-coach-hide" data-coach-action="collapse">Piilota</button>
         </div>
         <div class="lumix-coach-step">
           <strong>${escapeHtml(step.title)}</strong>
@@ -440,6 +467,7 @@ function renderCoach(client) {
           <strong>${escapeHtml(coach.title)}</strong>
           <p>Hiljainen apu seuraavaan kohtaan.</p>
         </div>
+        <button type="button" class="ghost-button lumix-coach-hide" data-coach-action="collapse">Piilota</button>
       </div>
       <p class="lumix-coach-text">${escapeHtml(coach.text)}</p>
       ${
@@ -809,6 +837,8 @@ function renderIntake(client) {
 
 function renderRecommendation(client) {
   const recommendation = client.strategyRecommendation;
+  const runtime = getLumixRuntime(client);
+  const recommendationEligibility = runtime.actions.recommend_strategy;
 
   if (!hasProfile(client)) {
     return `
@@ -835,8 +865,12 @@ function renderRecommendation(client) {
           </div>
           <p>Pyydä yksi suunta.</p>
         </div>
-        <p class="body-copy">Lumix ehdottaa viestin, CTA:n ja sisältökulmat.</p>
-        <button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä ehdotus</button>
+        <p class="body-copy">${escapeHtml(recommendationEligibility.reason || "Lumix ehdottaa viestin, CTA:n ja sisältökulmat.")}</p>
+        ${
+          recommendationEligibility.ready
+            ? '<button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä ehdotus</button>'
+            : ""
+        }
       </div>
     `;
   }
@@ -942,18 +976,21 @@ function renderLeads(leads) {
 
 function renderLumixTimeline(client) {
   const action = lumixActionState.get(client.id);
+  const runtime = getLumixRuntime(client);
   const stages = [
     {
       key: "recommend",
       label: "Suunta",
-      status: client.strategyRecommendation ? "done" : "idle",
-      meta: client.strategyRecommendation ? "ehdotus valmis" : "odottaa"
+      status: runtime.states.strategy.exists ? "done" : "idle",
+      meta: runtime.states.strategy.exists ? runtime.states.strategy.status : "odottaa"
     },
     {
       key: "generate",
       label: "Sisältö",
-      status: hasContent(client) ? "done" : "idle",
-      meta: client.lastGenerationAt ? `viimeksi ${formatDate(client.lastGenerationAt)}` : "odottaa"
+      status: runtime.states.contentPack.status !== "empty" ? "done" : "idle",
+      meta: runtime.states.contentPack.status !== "empty"
+        ? `${runtime.states.contentPack.status}${client.lastGenerationAt ? ` • ${formatDate(client.lastGenerationAt)}` : ""}`
+        : "odottaa"
     },
     {
       key: "publish",
@@ -991,37 +1028,55 @@ function renderLumixTimeline(client) {
   `;
 }
 
+function renderOntologySummary(client) {
+  const runtime = getLumixRuntime(client);
+  const objects = runtime.objectSummary || {};
+
+  return `
+    <div class="flow-strip compact-stat-strip ontology-strip">
+      <span class="flow-pill">Offer ${objects.offer ? "valmis" : "puuttuu"}</span>
+      <span class="flow-pill">Audience ${objects.audience ? "valmis" : "puuttuu"}</span>
+      <span class="flow-pill">Goal ${objects.goal ? "valmis" : "puuttuu"}</span>
+      <span class="flow-pill">Voice ${objects.brandVoice ? "valmis" : "puuttuu"}</span>
+    </div>
+  `;
+}
+
 function renderGenerateStage(client) {
-  if (!client.strategyRecommendation) {
+  const runtime = getLumixRuntime(client);
+  const generateEligibility = runtime.actions.generate_pack;
+
+  if (!generateEligibility.ready && !hasContent(client)) {
     return `
       <div class="stage-card stage-card-locked">
         <div class="section-head">
           <div>
             <span class="section-kicker">Vaihe 3</span>
-            <h4>Luo sisältö</h4>
+            <h4>Generoi kaikki</h4>
           </div>
-          <p>Odottaa vaihetta 2.</p>
+          <p>Odottaa intakea.</p>
         </div>
-        <p class="body-copy">Pyydä ensin Lumixilta ehdotus.</p>
+        <p class="body-copy">${escapeHtml(generateEligibility.reason || "Täytä intake ensin.")}</p>
       </div>
     `;
   }
-
-  const visibleBlogs = client.blogs.slice(0, 2);
 
   return `
     <div class="stage-card">
       <div class="section-head">
         <div>
           <span class="section-kicker">Vaihe 3</span>
-          <h4>Luo sisältö</h4>
+          <h4>Generoi kaikki</h4>
         </div>
-        <p>Tee valmis paketti.</p>
+        <p>Tämä on tuotteen päätoiminto.</p>
       </div>
 
+      <p class="body-copy stage-inline-note">
+        Lumix luo samalla strategian, landing-sivun, 3 blogia ja SEO-paketin.
+      </p>
+
       <div class="stage-actions">
-        <button type="button" data-action="generate" data-guide="generate">Generoi sisältö</button>
-        <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa sivu</a>
+        <button type="button" data-action="generate" data-guide="generate">Generoi kaikki</button>
       </div>
 
       <div class="flow-strip compact-stat-strip">
@@ -1029,9 +1084,69 @@ function renderGenerateStage(client) {
         <span class="flow-pill">Blogit ${client.blogs.length}</span>
         <span class="flow-pill">SEO ${client.seo ? "valmis" : "kesken"}</span>
       </div>
+    </div>
+  `;
+}
 
-      <details class="stage-subdetails">
-        <summary>Näytä sivu</summary>
+function renderPreviewStage(client) {
+  if (!hasContent(client)) {
+    return `
+      <div class="stage-card stage-card-locked">
+        <div class="section-head">
+          <div>
+            <span class="section-kicker">Vaihe 4</span>
+            <h4>Esikatsele sisältö</h4>
+          </div>
+          <p>Odottaa generointia.</p>
+        </div>
+        <p class="body-copy">Kun painat Generoi kaikki, valmis sivu, blogit ja SEO näkyvät tässä.</p>
+      </div>
+    `;
+  }
+
+  const visibleBlogs = client.blogs.slice(0, 3);
+  const recommendation = client.strategyRecommendation;
+
+  return `
+    <div class="stage-card" data-guide="preview">
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">Vaihe 4</span>
+          <h4>Esikatsele sisältö</h4>
+        </div>
+        <p>Tarkista ennen julkaisua.</p>
+      </div>
+
+      <div class="stage-actions">
+        <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa valmis sivu</a>
+      </div>
+
+      ${
+        recommendation
+          ? `
+            <details class="stage-subdetails">
+              <summary>Näytä Lumixin suunta</summary>
+              <div class="strategy-list">
+                <div class="seo-item">
+                  <span>Positioning</span>
+                  <strong>${escapeHtml(recommendation.positioning || "")}</strong>
+                </div>
+                <div class="seo-item">
+                  <span>Pääpalvelu</span>
+                  <strong>${escapeHtml(recommendation.primaryOffer || "")}</strong>
+                </div>
+                <div class="seo-item">
+                  <span>CTA</span>
+                  <strong>${escapeHtml(recommendation.ctaStrategy || "")}</strong>
+                </div>
+              </div>
+            </details>
+          `
+          : ""
+      }
+
+      <details class="stage-subdetails" open>
+        <summary>Näytä landing-sivu</summary>
         <div class="site-frame stage-preview-frame">
           <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
         </div>
@@ -1041,11 +1156,6 @@ function renderGenerateStage(client) {
         <summary>Näytä blogit</summary>
         <div class="blog-frame stage-preview-frame">
           <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
-          ${
-            client.blogs.length > visibleBlogs.length
-              ? `<p class="body-copy">Näytetään ${visibleBlogs.length}/${client.blogs.length} blogia.</p>`
-              : ""
-          }
         </div>
       </details>
 
@@ -1060,18 +1170,21 @@ function renderGenerateStage(client) {
 }
 
 function renderPublishStage(client) {
-  if (!hasContent(client)) {
+  const runtime = getLumixRuntime(client);
+  const publishEligibility = runtime.actions.publish_pack;
+
+  if (!publishEligibility.ready && !hasContent(client)) {
     return `
       <div class="stage-card stage-card-locked">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Vaihe 4</span>
-            <h4>Julkaise</h4>
-          </div>
-          <p>Odottaa vaihetta 3.</p>
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">Vaihe 5</span>
+          <h4>Julkaise</h4>
         </div>
-        <p class="body-copy">Generoi ensin sisältö.</p>
+        <p>Odottaa esikatselua.</p>
       </div>
+      <p class="body-copy">${escapeHtml(publishEligibility.reason || "Generoi ensin sisältö.")}</p>
+    </div>
     `;
   }
 
@@ -1079,10 +1192,10 @@ function renderPublishStage(client) {
     <div class="stage-card">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 4</span>
+          <span class="section-kicker">Vaihe 5</span>
           <h4>Julkaise</h4>
         </div>
-        <p>Vie sisältö ulos.</p>
+        <p>Vie valmis paketti ulos.</p>
       </div>
       <p class="body-copy stage-inline-note">
         ${
@@ -1092,9 +1205,10 @@ function renderPublishStage(client) {
         }
         ${client.publishHistory.length ? ` Viimeisin julkaisu ${formatDate(client.publishHistory[0].createdAt)}.` : ""}
       </p>
+      <p class="body-copy">${escapeHtml(publishEligibility.reason || "")}</p>
 
       ${
-        client.publishTargets.length
+        publishEligibility.ready
           ? `
             <div class="stage-actions">
               <button type="button" data-action="publish-all" data-guide="publish">Julkaise sisältö</button>
@@ -1106,11 +1220,13 @@ function renderPublishStage(client) {
       }
 
       ${
-        client.publishHistory.length
+        client.leads.length || client.analytics.leadSubmits
           ? `
             <details class="stage-subdetails">
-              <summary>Näytä julkaisuhistoria</summary>
-              ${renderPublishHistory(client)}
+              <summary>Näytä liidit</summary>
+              <div class="mini-list">
+                ${renderLeads(client.leads.slice(0, 3))}
+              </div>
             </details>
           `
           : ""
@@ -1287,6 +1403,12 @@ function renderClientExtras(client) {
                   <div class="lumix-action-card">
                     <strong>${escapeHtml(lumixAction.action)}</strong>
                     <p>Objektit: ${lumixAction.objectCount} • Linkit: ${lumixAction.linkCount}</p>
+                    ${lumixAction.explanation?.reason ? `<p>${escapeHtml(lumixAction.explanation.reason)}</p>` : ""}
+                    ${
+                      lumixAction.explanation?.missingObjects?.length
+                        ? `<p>Puuttuu: ${escapeHtml(lumixAction.explanation.missingObjects.join(", "))}</p>`
+                        : ""
+                    }
                     ${
                       lumixAction.ready !== undefined
                         ? `<p>Valmis ajoon: ${lumixAction.ready ? "kyllä" : "ei"}</p>`
@@ -1320,11 +1442,11 @@ function renderEmptyWorkspace() {
       </div>
 
       <div class="flow-strip">
-        <span class="flow-pill">1. Yrityksen tiedot</span>
-        <span class="flow-pill">2. Lumixin ehdotus</span>
-        <span class="flow-pill">3. Luo sisältö</span>
-        <span class="flow-pill">4. Julkaise</span>
-        <span class="flow-pill">5. Liidit</span>
+        <span class="flow-pill">1. Lisää asiakas</span>
+        <span class="flow-pill">2. Täytä intake</span>
+        <span class="flow-pill">3. Generoi kaikki</span>
+        <span class="flow-pill">4. Esikatsele sisältö</span>
+        <span class="flow-pill">5. Julkaise</span>
       </div>
 
       <div class="next-step-card">
@@ -1352,15 +1474,17 @@ function renderClientSelector(clients) {
   clientsList.innerHTML = clients
     .map(
       (client) => {
-        const statusLabel = !hasProfile(client)
-          ? "Aloita tiedoista"
-          : !client.strategyRecommendation
-            ? "Pyydä suunta"
-            : !hasContent(client)
-              ? "Generoi sisältö"
-              : !client.publishHistory.length
+        const nextAction = getLumixRuntime(client).nextStep?.actionId;
+        const statusLabel =
+          nextAction === "recommend_strategy"
+            ? "Generoi kaikki"
+            : nextAction === "generate_pack"
+              ? "Generoi kaikki"
+              : nextAction === "publish_pack"
                 ? "Julkaise"
-                : "Seuraa liidejä";
+                : nextAction === "review_leads"
+                  ? "Valmis"
+                  : "Aloita tiedoista";
 
         return `
         <button
@@ -1380,7 +1504,6 @@ function renderClientSelector(clients) {
 }
 
 function renderActiveClient(client) {
-  const publishState = client.publishHistory.length ? "Julkaistu" : "Kesken";
   const nextStep = getNextStep(client);
 
   activeClientView.innerHTML = `
@@ -1393,14 +1516,15 @@ function renderActiveClient(client) {
         </div>
         <div class="workflow-header-meta">
           <span class="client-status">${escapeHtml(client.billingStatus)}</span>
-          <span class="client-status">${escapeHtml(publishState)}</span>
         </div>
       </div>
 
-      <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Paketti ${escapeHtml(client.plan)}</span>
-        <span class="flow-pill">Rytmi ${client.generationIntervalDays} pv</span>
-        <span class="flow-pill">Liidit ${client.analytics.leadSubmits}</span>
+      <div class="primary-flow-strip">
+        <span class="flow-pill">1. Lisää asiakas</span>
+        <span class="flow-pill">2. Täytä intake</span>
+        <span class="flow-pill">3. Generoi kaikki</span>
+        <span class="flow-pill">4. Esikatsele sisältö</span>
+        <span class="flow-pill">5. Julkaise</span>
       </div>
 
       <div class="next-step-card">
@@ -1408,29 +1532,11 @@ function renderActiveClient(client) {
         <strong>${escapeHtml(nextStep.text)}</strong>
       </div>
 
-      <div class="client-meta workflow-meta-grid">
-        <div class="meta-box">
-          <strong>Näytöt</strong>
-          <p>${client.analytics.pageViews}</p>
-        </div>
-        <div class="meta-box">
-          <strong>CTA-klikit</strong>
-          <p>${client.analytics.ctaClicks}</p>
-        </div>
-        <div class="meta-box">
-          <strong>Julkaisu</strong>
-          <p>${escapeHtml(publishState)}</p>
-        </div>
-      </div>
-
-      ${renderLumixTimeline(client)}
-
       <div class="workflow-stage-stack">
         ${renderIntake(client)}
-        ${renderRecommendation(client)}
         ${renderGenerateStage(client)}
+        ${renderPreviewStage(client)}
         ${renderPublishStage(client)}
-        ${renderLeadsStage(client)}
       </div>
     </article>
 
@@ -1470,6 +1576,7 @@ function render() {
     state.tourInitialized = true;
     state.tourActive = false;
     state.tourStepIndex = 0;
+    state.lumixHidden = window.localStorage.getItem(lumixHiddenStorageKey) === "1";
   }
 
   renderCoach(activeClient);
@@ -1522,7 +1629,13 @@ document.getElementById("client-form").addEventListener("submit", async (event) 
     });
     form.reset();
     state.activeClientId = result.client?.id || state.activeClientId;
-    setStatus(result.job ? `Asiakas luotu. Generointi lisätty jonoon (#${result.job.id}).` : "Asiakas luotu.");
+    setStatus(
+      result.job
+        ? `Asiakas luotu. Generointi lisätty jonoon (#${result.job.id}).`
+        : result.generationDecision?.reason
+          ? `Asiakas luotu. ${result.generationDecision.reason}`
+          : "Asiakas luotu."
+    );
     await refresh();
   });
 });
@@ -1660,11 +1773,11 @@ activeClientView.addEventListener("click", async (event) => {
 
   if (action === "generate") {
     await runAction(`Generoidaan asiakkaalle ${client.businessName}...`, async () => {
-      const result = await api(`/api/clients/${clientId}/generate`, { method: "POST" });
+      const result = await api(`/api/clients/${clientId}/generate-all`, { method: "POST" });
       if (result.lumixAction) {
         lumixActionState.set(clientId, result.lumixAction);
       }
-      setStatus(`Generointi lisätty jonoon (#${result.job.id}).`);
+      setStatus(`Sisältö generoitu asiakkaalle ${client.businessName}.`);
       await refresh();
     });
     return;
@@ -1798,6 +1911,20 @@ lumixCoach.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "collapse") {
+    state.lumixHidden = true;
+    window.localStorage.setItem(lumixHiddenStorageKey, "1");
+    renderCoach(activeClient);
+    return;
+  }
+
+  if (action === "expand") {
+    state.lumixHidden = false;
+    window.localStorage.setItem(lumixHiddenStorageKey, "0");
+    renderCoach(activeClient);
+    return;
+  }
+
   if (action === "apply-suggestion") {
     const activeClient = getActiveClient();
     if (!activeClient) return;
@@ -1826,6 +1953,8 @@ lumixCoach.addEventListener("click", (event) => {
   }
 
   if (action === "start-tour") {
+    state.lumixHidden = false;
+    window.localStorage.setItem(lumixHiddenStorageKey, "0");
     state.tourActive = true;
     state.tourStepIndex = 0;
     render();

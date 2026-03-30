@@ -1,6 +1,7 @@
 export function createScheduler(
   database,
   enqueueJob,
+  shouldQueueClient = null,
   intervalMs = Number(process.env.SCHEDULER_INTERVAL_MS || 60000)
 ) {
   let timer = null;
@@ -10,6 +11,21 @@ export function createScheduler(
     const results = [];
 
     for (const client of dueClients) {
+      if (shouldQueueClient) {
+        const hydratedClient = database.getClientById(client.agency_id, client.id);
+        const decision = shouldQueueClient(hydratedClient);
+
+        if (!decision.ready) {
+          results.push({
+            clientId: client.id,
+            businessName: client.business_name,
+            status: "blocked",
+            reason: decision.reason
+          });
+          continue;
+        }
+      }
+
       const job = enqueueJob({
         agencyId: client.agency_id,
         clientId: client.id,
