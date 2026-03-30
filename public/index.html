@@ -1,125 +1,393 @@
 <!DOCTYPE html>
-<html lang="fi">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lumix</title>
+    <title>Lumix | Build your marketing and website in one flow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="landing-shell">
-      <header class="landing-topbar">
-        <a class="landing-brand" href="/lumix">Lumix</a>
-        <div class="landing-top-actions">
-          <a class="ghost-link landing-top-link" href="/dashboard">Dashboard</a>
-          <a class="ghost-link landing-top-link" href="/login">Kirjaudu</a>
-          <a class="cta-link landing-top-link" href="/register">Aloita</a>
-        </div>
-      </header>
+    <div class="lumix-landing">
+      <main class="lumix-shell">
+        <header class="lumix-topbar">
+          <a class="lumix-brand" href="/">
+            <span class="lumix-brand-mark" aria-hidden="true"></span>
+            <span class="lumix-brand-word">Lumix</span>
+          </a>
 
-      <section class="landing-simple-hero">
-        <div class="landing-simple-copy">
-          <p class="eyebrow">Lumix</p>
-          <h1>Anna yrityksen tiedot. Saat valmiin suunnan ja sisällön.</h1>
-          <p class="lede landing-lede">
-            Lumix auttaa rakentamaan yhdelle yritykselle selkeän suunnan, sivun, blogit ja julkaisun samassa paikassa.
+          <nav class="lumix-nav" aria-label="Primary">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#cta">Pricing</a>
+          </nav>
+
+          <div class="lumix-top-actions">
+            <a class="lumix-button lumix-button-secondary" href="/login">Log in</a>
+            <a class="lumix-button lumix-button-primary" href="/register">Start free trial</a>
+          </div>
+        </header>
+
+      <section class="lumix-hero">
+        <div class="lumix-hero-copy">
+          <p class="lumix-kicker">AI-powered marketing workspace</p>
+          <h1>Build your marketing and website in one flow.</h1>
+          <p class="lumix-lede">
+            From business info to live site, content, and SEO. Lumix brings your website, content
+            engine, performance tracking, and publishing workflow into one calm workspace.
           </p>
 
-          <div class="landing-points">
-            <span>Yksi selkeä flow</span>
-            <span>Sivu + blogit + SEO</span>
-            <span>Julkaisu ja liidit samassa paikassa</span>
+          <div class="lumix-hero-actions">
+            <a class="lumix-button lumix-button-primary" href="/register">Start free trial</a>
+            <a class="lumix-button lumix-button-secondary" href="/register">Book a demo</a>
           </div>
 
-          <div class="landing-cta-row">
-            <a class="ghost-link landing-cta-link" href="/dashboard">Avaa dashboard</a>
-            <a class="cta-link landing-cta-link" href="/register">Aloita</a>
-            <a class="ghost-link landing-cta-link" href="/login">Kirjaudu</a>
-          </div>
-
-          <div class="landing-points landing-links-row">
-            <a href="/lumix">Pääsivu</a>
-            <a href="/login">Login</a>
-            <a href="/register">Register</a>
-            <a href="/dashboard">Dashboard</a>
+          <div class="lumix-proof-row">
+            <div class="lumix-proof-chip">
+              <strong>4.8/5</strong>
+              <span>Rated by growing service teams</span>
+            </div>
+            <div class="lumix-proof-chip">
+              <strong>One workspace</strong>
+              <span>Pages, SEO, analytics, publishing</span>
+            </div>
+            <div class="lumix-proof-chip">
+              <strong>Live in days</strong>
+              <span>From idea to published system</span>
+            </div>
           </div>
         </div>
 
-        <aside class="landing-simple-preview">
-          <div class="landing-preview-card">
-            <div class="landing-preview-head">
-              <p class="mockup-kicker">Esimerkki</p>
-              <strong>Nordic Sauna Studio</strong>
+        <div class="lumix-hero-visual">
+          <div class="lumix-app-frame">
+            <div class="lumix-browser-bar">
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
 
-            <div class="landing-preview-stack">
-              <article class="landing-preview-block">
-                <span>1. Yrityksen tiedot</span>
-                <p>Premium sauna design for hotels and luxury homes.</p>
-              </article>
+            <div class="lumix-app-grid">
+              <aside class="lumix-sidebar">
+                <div class="lumix-sidebar-brand">
+                  <strong>Lumix</strong>
+                  <span>Summer Campaign</span>
+                </div>
 
-              <article class="landing-preview-block">
-                <span>2. Lumixin ehdotus</span>
-                <p>Painota luotettavuutta, premium-tuntua ja tarjouspyyntöä.</p>
-              </article>
+                <nav class="lumix-sidebar-nav" aria-label="Workspace sections">
+                  <a class="is-active" href="#features">Pages</a>
+                  <a href="#features">Content</a>
+                  <a href="#features">SEO</a>
+                  <a href="#features">Analytics</a>
+                  <a href="#features">Settings</a>
+                </nav>
 
-              <article class="landing-preview-block">
-                <span>3. Valmis paketti</span>
-                <p>Sivu, 3 blogia, SEO-paketti ja julkaisuvalmis sisältö.</p>
-              </article>
+                <div class="lumix-sidebar-card">
+                  <span>AI Assistant</span>
+                  <p>Generate homepage</p>
+                  <p>Write launch email</p>
+                </div>
+              </aside>
+
+              <section class="lumix-workspace">
+                <div class="lumix-workspace-top">
+                  <div>
+                    <p class="lumix-micro-label">Website Preview</p>
+                    <strong>positiva</strong>
+                  </div>
+                  <div class="lumix-mini-badges">
+                    <span>SEO ready</span>
+                    <span>Draft live</span>
+                  </div>
+                </div>
+
+                <div class="lumix-preview-surface">
+                  <div class="lumix-preview-copy">
+                    <p class="lumix-kicker">Smart website</p>
+                    <h2>Helping brands grow with smart marketing.</h2>
+                    <p>
+                      We create content and websites that bring real results with one unified
+                      workflow.
+                    </p>
+                    <div class="lumix-preview-actions">
+                      <span>Get in touch</span>
+                      <span>Learn more</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="lumix-metrics-row">
+                  <article>
+                    <span>Pages</span>
+                    <strong>12</strong>
+                    <p>Homepage, about, services, blog</p>
+                  </article>
+                  <article>
+                    <span>Generated Content</span>
+                    <strong>34</strong>
+                    <p>Landing pages, blogs, email copy</p>
+                  </article>
+                  <article>
+                    <span>Visitors</span>
+                    <strong>7.1k</strong>
+                    <p>+18% from last 30 days</p>
+                  </article>
+                </div>
+              </section>
             </div>
+
+            <aside class="lumix-floating-card lumix-assistant-card">
+              <p class="lumix-micro-label">AI Assistant</p>
+              <strong>Suggested next actions</strong>
+              <ul>
+                <li>Generate homepage sections</li>
+                <li>Write blog post for "smart growth"</li>
+                <li>Fix missing SEO description</li>
+              </ul>
+            </aside>
+
+            <aside class="lumix-floating-card lumix-seo-card">
+              <p class="lumix-micro-label">SEO Tools</p>
+              <strong>Score 87</strong>
+              <div class="lumix-score-list">
+                <span><i></i>Keyword coverage</span>
+                <span><i></i>Meta description</span>
+                <span><i></i>Heading structure</span>
+              </div>
+            </aside>
           </div>
-        </aside>
+        </div>
       </section>
 
-      <section class="landing-step-grid">
-        <article class="panel landing-step-card">
-          <span class="landing-step-index">1</span>
-          <h2>Kerro yrityksestä</h2>
-          <p>Kirjoita mitä yritys tekee, kenelle se myy ja mikä on tärkein tavoite.</p>
-        </article>
-
-        <article class="panel landing-step-card">
-          <span class="landing-step-index">2</span>
-          <h2>Hyväksy suunta</h2>
-          <p>Lumix ehdottaa viestin, CTA:n ja rakenteen ennen kuin mitään generoidaan.</p>
-        </article>
-
-        <article class="panel landing-step-card">
-          <span class="landing-step-index">3</span>
-          <h2>Generoi ja julkaise</h2>
-          <p>Sivu, blogit, SEO ja julkaisu pysyvät samassa näkymässä.</p>
-        </article>
+      <section class="lumix-trust-row" aria-label="Social proof">
+        <div>Google <strong>4.8</strong></div>
+        <div>Trusted by growing businesses</div>
+        <div>Fast website launches</div>
+        <div>SEO + analytics included</div>
       </section>
 
-      <section class="panel landing-summary-panel">
-        <div class="panel-head">
+      <section id="features" class="lumix-section">
+        <div class="lumix-section-head">
           <div>
-            <p class="eyebrow">Mitä tämä tekee</p>
-            <h2>Yksi paikka yhdelle asiakkaalle.</h2>
+            <p class="lumix-kicker">Product overview</p>
+            <h2>A real marketing system, not just a page builder.</h2>
           </div>
-          <p>Ei kymmentä eri työkalua. Vain yksi selkeä ketju alusta julkaisuun.</p>
+          <p>
+            Lumix keeps your site structure, content generation, SEO, analytics, and publishing in
+            one connected dashboard so the whole workflow stays clear.
+          </p>
         </div>
 
-        <div class="landing-summary-grid">
-          <div class="meta-box">
-            <strong>Yrityksen tiedot</strong>
-            <p>Mitä myydään, kenelle ja mikä on tavoite.</p>
-          </div>
-          <div class="meta-box">
-            <strong>Lumixin ehdotus</strong>
-            <p>Selkeä viesti ennen generointia.</p>
-          </div>
-          <div class="meta-box">
-            <strong>Sisältö</strong>
-            <p>Sivu, blogit ja SEO samalla suunnalla.</p>
-          </div>
-          <div class="meta-box">
-            <strong>Julkaisu ja liidit</strong>
-            <p>Näet mitä julkaistiin ja kuka kiinnostui.</p>
+        <div class="lumix-overview-grid">
+          <article class="lumix-overview-panel">
+            <div class="lumix-overview-main">
+              <div class="lumix-overview-sidebar">
+                <span>Workspace</span>
+                <strong>Main Dashboard</strong>
+                <ul>
+                  <li>Pages</li>
+                  <li>Content</li>
+                  <li>SEO</li>
+                  <li>Analytics</li>
+                  <li>Settings</li>
+                </ul>
+              </div>
+
+              <div class="lumix-overview-canvas">
+                <div class="lumix-overview-toolbar">
+                  <span>Homepage draft</span>
+                  <span>Audience: Small business owners</span>
+                  <span>Ready to publish</span>
+                </div>
+
+                <div class="lumix-overview-content">
+                  <section class="lumix-overview-preview">
+                    <p class="lumix-micro-label">Live preview</p>
+                    <h3>Build a website that grows with your business.</h3>
+                    <p>
+                      Lumix arranges messaging, structure, and content from the same business brief.
+                    </p>
+                    <div class="lumix-structure-list">
+                      <span>Hero</span>
+                      <span>Services</span>
+                      <span>Proof</span>
+                      <span>CTA</span>
+                    </div>
+                  </section>
+
+                  <aside class="lumix-assistant-panel">
+                    <p class="lumix-micro-label">AI Assistant</p>
+                    <strong>Guides the next step</strong>
+                    <div class="lumix-assistant-suggestions">
+                      <span>Generate homepage</span>
+                      <span>Write blog post</span>
+                      <span>Refresh keyword set</span>
+                    </div>
+                  </aside>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div class="lumix-overview-stack">
+            <article class="lumix-side-card">
+              <p class="lumix-micro-label">Connected workflow</p>
+              <strong>One brief feeds the whole system.</strong>
+              <p>
+                Business details become page structure, blog topics, SEO improvements, and publish
+                actions without moving across separate tools.
+              </p>
+            </article>
+
+            <article class="lumix-side-card">
+              <p class="lumix-micro-label">Publishing</p>
+              <strong>Go live when everything is ready.</strong>
+              <div class="lumix-publish-status">
+                <span>Domain connected</span>
+                <span>SEO checklist complete</span>
+                <span>Analytics tracking installed</span>
+              </div>
+            </article>
           </div>
         </div>
       </section>
-    </main>
+
+      <section class="lumix-section">
+        <div class="lumix-section-head">
+          <div>
+            <p class="lumix-kicker">Core features</p>
+            <h2>Everything needed to build and run marketing from one place.</h2>
+          </div>
+        </div>
+
+        <div class="lumix-feature-grid">
+          <article class="lumix-feature-card">
+            <p class="lumix-micro-label">AI Assistant</p>
+            <h3>Acts like a strategist inside the workflow.</h3>
+            <div class="lumix-chat-list">
+              <span>Generate homepage</span>
+              <span>Write blog post</span>
+              <span>Suggest stronger CTA</span>
+            </div>
+          </article>
+
+          <article class="lumix-feature-card">
+            <p class="lumix-micro-label">Website builder</p>
+            <h3>Edit structure and preview the page live.</h3>
+            <div class="lumix-stack-mini">
+              <span>Hero section</span>
+              <span>Services block</span>
+              <span>Testimonials</span>
+            </div>
+          </article>
+
+          <article class="lumix-feature-card">
+            <p class="lumix-micro-label">Content generation</p>
+            <h3>Create landing pages, blog posts, and SEO text.</h3>
+            <div class="lumix-tone-row">
+              <span>Warm</span>
+              <span>Confident</span>
+              <span>For founders</span>
+            </div>
+          </article>
+
+          <article class="lumix-feature-card">
+            <p class="lumix-micro-label">SEO tools</p>
+            <h3>Track score, keywords, and what needs fixing.</h3>
+            <div class="lumix-score-panel">
+              <strong>87</strong>
+              <div>
+                <span>Keyword usage</span>
+                <span>Meta tags</span>
+                <span>Headings</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="lumix-feature-card">
+            <p class="lumix-micro-label">Analytics</p>
+            <h3>See visitors, conversions, and trend lines.</h3>
+            <div class="lumix-chart-panel">
+              <span>Visitors 2,843</span>
+              <span>Conversions 124</span>
+              <span>+18% growth</span>
+            </div>
+          </article>
+
+          <article class="lumix-feature-card">
+            <p class="lumix-micro-label">Publish</p>
+            <h3>Connect the domain and push everything live.</h3>
+            <div class="lumix-publish-panel">
+              <span>Domain connected</span>
+              <span>SSL active</span>
+              <strong>Go live</strong>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="lumix-section lumix-section-compact">
+        <div class="lumix-section-head">
+          <div>
+            <p class="lumix-kicker">How it works</p>
+            <h2>Simple from first input to published system.</h2>
+          </div>
+        </div>
+
+        <div class="lumix-steps">
+          <article>
+            <span>1</span>
+            <strong>Add your business</strong>
+          </article>
+          <article>
+            <span>2</span>
+            <strong>Lumix suggests</strong>
+          </article>
+          <article>
+            <span>3</span>
+            <strong>Edit and generate</strong>
+          </article>
+          <article>
+            <span>4</span>
+            <strong>Publish</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="lumix-section lumix-benefits">
+        <div class="lumix-section-head">
+          <div>
+            <p class="lumix-kicker">Benefits</p>
+            <h2>Clear workflow, fewer tools, faster launch.</h2>
+          </div>
+          <p>
+            Lumix is designed so users immediately understand what happens next and how their whole
+            marketing setup moves forward.
+          </p>
+        </div>
+
+        <div class="lumix-benefit-list">
+          <div>Launch faster</div>
+          <div>No need for multiple tools</div>
+          <div>Clear workflow</div>
+        </div>
+      </section>
+
+      <section id="cta" class="lumix-final-cta">
+        <div>
+          <p class="lumix-kicker">Ready to build smarter?</p>
+          <h2>Set up your website, content, and SEO from one place.</h2>
+        </div>
+        <div class="lumix-hero-actions">
+          <a class="lumix-button lumix-button-primary" href="/register">Start free trial</a>
+          <a class="lumix-button lumix-button-secondary" href="/register">Book a demo</a>
+        </div>
+      </section>
+      </main>
+    </div>
   </body>
 </html>
