@@ -6,98 +6,146 @@
     <title>Dashboard | Webbom</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="page-shell page-shell-dashboard">
-      <section class="dashboard-topbar">
-        <div>
-          <p class="eyebrow">Webbom</p>
-          <h1 id="agency-title">Työtila</h1>
-        </div>
-        <div class="toolbar-actions">
-          <button id="lumix-button" class="ghost-button" type="button">Avaa Lumix</button>
-          <button id="logout-button" class="ghost-button" type="button">Kirjaudu ulos</button>
-        </div>
-      </section>
+  <body class="dashboard-body">
+    <div class="dashboard-app">
+      <aside class="dashboard-sidebar">
+        <a href="/webbom" class="dashboard-brand">
+          <span class="dashboard-brand-mark"></span>
+          <span>Lumix</span>
+        </a>
 
-      <section class="dashboard-shell">
-        <aside class="client-rail">
-          <article class="panel simple-panel" data-guide="clients">
-            <div class="panel-head clients-head">
-              <div>
-                <h2>Asiakkaat</h2>
-                <p>Valitse yksi asiakas ja vie flow maaliin.</p>
-              </div>
-              <p id="clients-caption">0 asiakasta</p>
+        <div class="dashboard-side-label">Workspace</div>
+        <nav class="dashboard-side-nav">
+          <a href="#" class="dashboard-side-link active">Overview</a>
+          <a href="#" class="dashboard-side-link">Clients</a>
+          <a href="#" class="dashboard-side-link">Content</a>
+          <a href="#" class="dashboard-side-link">SEO</a>
+          <a href="#" class="dashboard-side-link">Analytics</a>
+          <a href="#" class="dashboard-side-link">Settings</a>
+        </nav>
+
+        <article class="panel simple-panel dashboard-sidebar-panel" data-guide="clients">
+          <div class="panel-head clients-head">
+            <div>
+              <h2>Clients</h2>
+              <p>Valitse aktiivinen asiakas täältä.</p>
             </div>
-            <div id="clients-list" class="client-selector"></div>
-          </article>
+            <p id="clients-caption">0 asiakasta</p>
+          </div>
+          <div id="clients-list" class="client-selector"></div>
+        </article>
 
-          <details class="panel add-client-panel" data-guide="new-client">
-            <summary>Uusi asiakas</summary>
-            <form id="client-form" class="stack-form">
+        <details class="panel add-client-panel dashboard-sidebar-panel" data-guide="new-client">
+          <summary>Uusi asiakas</summary>
+          <form id="client-form" class="stack-form">
+            <label>
+              <span>Yrityksen nimi</span>
+              <input name="businessName" placeholder="Nordic Sauna Studio" required />
+            </label>
+            <label>
+              <span>Kuvaus</span>
+              <textarea
+                name="description"
+                rows="4"
+                placeholder="Mitä yritys tekee ja kenelle."
+                required
+              ></textarea>
+            </label>
+
+            <details class="stage-subdetails">
+              <summary>Lisää tietoja</summary>
               <label>
-                <span>Yrityksen nimi</span>
-                <input name="businessName" placeholder="Nordic Sauna Studio" required />
-              </label>
-              <label>
-                <span>Kuvaus</span>
+                <span>Lisäohje</span>
                 <textarea
-                  name="description"
-                  rows="4"
-                  placeholder="Mitä yritys tekee ja kenelle."
-                  required
+                  name="customPrompt"
+                  rows="3"
+                  placeholder="Sävy, kohderyhmä ja toivottu suunta."
                 ></textarea>
               </label>
-
-              <details class="stage-subdetails">
-                <summary>Lisää tietoja</summary>
+              <div class="inline-grid">
                 <label>
-                  <span>Lisäohje</span>
-                  <textarea
-                    name="customPrompt"
-                    rows="3"
-                    placeholder="Sävy, kohderyhmä ja toivottu suunta."
-                  ></textarea>
+                  <span>Taso</span>
+                  <select name="plan">
+                    <option value="starter">Starter</option>
+                    <option value="growth">Growth</option>
+                    <option value="scale">Scale</option>
+                  </select>
                 </label>
-                <div class="inline-grid">
-                  <label>
-                    <span>Taso</span>
-                    <select name="plan">
-                      <option value="starter">Starter</option>
-                      <option value="growth">Growth</option>
-                      <option value="scale">Scale</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Tahti</span>
-                    <select name="generationIntervalDays">
-                      <option value="7">7 päivää</option>
-                      <option value="14">14 päivää</option>
-                      <option value="30" selected>30 päivää</option>
-                    </select>
-                  </label>
-                </div>
-                <label class="checkbox-row">
-                  <input name="autoGenerate" type="checkbox" checked />
-                  <span>Generoi heti</span>
+                <label>
+                  <span>Tahti</span>
+                  <select name="generationIntervalDays">
+                    <option value="7">7 päivää</option>
+                    <option value="14">14 päivää</option>
+                    <option value="30" selected>30 päivää</option>
+                  </select>
                 </label>
-                <label class="checkbox-row">
-                  <input name="scheduleEnabled" type="checkbox" checked />
-                  <span>Pidä ajastus päällä</span>
-                </label>
-              </details>
+              </div>
+              <label class="checkbox-row">
+                <input name="autoGenerate" type="checkbox" checked />
+                <span>Generoi heti</span>
+              </label>
+              <label class="checkbox-row">
+                <input name="scheduleEnabled" type="checkbox" checked />
+                <span>Pidä ajastus päällä</span>
+              </label>
+            </details>
 
-              <button type="submit">Luo asiakas</button>
-            </form>
-          </details>
-        </aside>
+            <button type="submit">Luo asiakas</button>
+          </form>
+        </details>
+      </aside>
 
-        <section class="workflow-shell" data-guide="workflow">
-          <div id="active-client-view"></div>
+      <main class="dashboard-main">
+        <section class="dashboard-topbar">
+          <div class="dashboard-topbar-copy">
+            <p class="eyebrow">Lumix workspace</p>
+            <h1 id="agency-title">Työtila</h1>
+            <p id="agency-subtitle">Build your website, content and SEO in one clear flow.</p>
+          </div>
+          <div class="toolbar-actions dashboard-toolbar-actions">
+            <select id="active-client-select" class="dashboard-select" aria-label="Valitse asiakas"></select>
+            <button id="primary-generate-button" class="dashboard-cta-button" type="button">Generate everything</button>
+            <button id="lumix-button" class="ghost-button" type="button">Avaa Lumix</button>
+            <button id="logout-button" class="ghost-button" type="button">Kirjaudu ulos</button>
+          </div>
         </section>
-      </section>
 
-      <details class="panel details-panel" data-guide="more-settings">
+        <section class="dashboard-shell dashboard-shell-lumix">
+          <section class="workflow-shell" data-guide="workflow">
+            <div id="active-client-view"></div>
+          </section>
+
+          <aside class="dashboard-side-column">
+            <article class="panel simple-panel simple-panel-nested dashboard-insight-card">
+              <div class="panel-head">
+                <h2>Workspace status</h2>
+                <p>Näet tärkeimmän tilan yhdellä silmäyksellä.</p>
+              </div>
+              <div class="chip-row chip-row-soft">
+                <span class="chip" id="ai-chip">AI: tarkistetaan...</span>
+                <span class="chip" id="stripe-chip">Stripe: tarkistetaan...</span>
+                <span class="chip" id="scheduler-chip">Ajastus: tarkistetaan...</span>
+              </div>
+              <section id="summary-grid" class="summary-grid"></section>
+              <div class="quick-actions dashboard-quick-actions">
+                <button id="worker-button" class="ghost-button" type="button">Aja jono</button>
+                <button id="scheduler-button" class="ghost-button" type="button">Aja ajastus</button>
+                <button id="send-report-button" class="ghost-button" type="button">Lähetä raportti</button>
+              </div>
+              <div id="jobs-list" class="mini-list"></div>
+            </article>
+
+            <article class="panel simple-panel simple-panel-nested lumix-panel dashboard-insight-card">
+              <div class="panel-head">
+                <h2>Lumix taustalla</h2>
+                <p id="lumix-summary">Näet täältä miten Lumix auttaa.</p>
+              </div>
+              <div id="lumix-codex" class="mini-list"></div>
+            </article>
+          </aside>
+        </section>
+
+        <details class="panel details-panel" data-guide="more-settings">
         <summary>Muut asetukset</summary>
 
         <section class="ops-grid">
@@ -201,8 +249,9 @@
             <div id="report-history" class="mini-list"></div>
           </article>
         </section>
-      </details>
-    </main>
+        </details>
+      </main>
+    </div>
 
     <aside id="lumix-coach" class="lumix-coach"></aside>
     <div id="status-banner" class="status-banner">Ladataan...</div>
