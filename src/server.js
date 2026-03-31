@@ -9,6 +9,7 @@ import { createAgencyService } from "./agency.js";
 import { createAuthService } from "./auth.js";
 import { createBillingService } from "./billing.js";
 import { createDatabase } from "./db.js";
+import { generateAndSaveStrategy } from "./lib/lumix-strategy.js";
 import { createPublishService } from "./publish.js";
 import { createQueueService } from "./queue.js";
 import { createReportService } from "./reports.js";
@@ -27,7 +28,7 @@ import {
 } from "./security.js";
 import {
   buildLumixContext,
-  buildLumixStrategyRecommendation,
+  buildLumixRuntime,
   getLumixAgent,
   getLumixCatalog,
   getLumixHumanCodex,
@@ -149,19 +150,45 @@ function requireRole(user, res, allowedRoles) {
   return true;
 }
 
+function hydrateLumixClient(client) {
+  return {
+    ...client,
+    lumix: buildLumixRuntime(client)
+  };
+}
+
+function lumixActionPayload(actionResult) {
+  return {
+    action: actionResult.action,
+    objectCount: actionResult.objects.all.length,
+    linkCount: actionResult.links.length,
+    explanation: actionResult.explanation || null,
+    ready: Boolean(actionResult.ready),
+    targetCount: actionResult.targetCount || 0
+  };
+}
+
+function getGenerateDecision(client) {
+  const runtime = buildLumixRuntime(client);
+  return {
+    ready: runtime.actions.generate_pack.ready,
+    reason: runtime.actions.generate_pack.reason
+  };
+}
+
 async function generateAndPersistClient(clientId, mode) {
   const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow) throw new Error("Client not found.");
   const hydratedClient = database.getClientById(clientRow.agency_id, clientId);
+  const generationDecision = getGenerateDecision(hydratedClient);
+
+  if (!generationDecision.ready) {
+    throw new Error(generationDecision.reason);
+  }
 
   try {
-    const pack = await agency.generatePack({
-      businessName: hydratedClient.businessName,
-      description: hydratedClient.description,
-      plan: hydratedClient.plan,
-      customPrompt: [hydratedClient.customPrompt || "", buildLumixContext(hydratedClient)]
-        .filter(Boolean)
-        .join("\n\n")
+    const pack = await agency.generateAllForClient({
+      client: hydratedClient
     });
 
     database.saveGeneratedContent(clientId, pack, mode);
@@ -223,7 +250,7 @@ const queue = createQueueService(database, {
   }
 });
 
-const scheduler = createScheduler(database, queue.enqueue);
+const scheduler = createScheduler(database, queue.enqueue, getGenerateDecision);
 queue.start();
 scheduler.start();
 
@@ -263,7 +290,7 @@ app.get("/api/bootstrap", (req, res) => {
       codex: getLumixHumanCodex()
     },
     summary: snapshot.summary,
-    clients: snapshot.clients,
+    clients: snapshot.clients.map(hydrateLumixClient),
     members: snapshot.members,
     reportSettings: snapshot.reportSettings,
     reportHistory: snapshot.reportHistory,
@@ -396,9 +423,10 @@ app.post("/api/clients", (req, res) => {
     generationIntervalDays,
     scheduleEnabled
   });
+  const generationDecision = getGenerateDecision(client);
 
   let job = null;
-  if (autoGenerate) {
+  if (autoGenerate && generationDecision.ready) {
     job = queue.enqueue({
       agencyId: user.agencyId,
       clientId: client.id,
@@ -407,7 +435,11 @@ app.post("/api/clients", (req, res) => {
     });
   }
 
-  res.status(201).json({ client, job });
+  res.status(201).json({
+    client: hydrateLumixClient(client),
+    job,
+    generationDecision
+  });
 });
 
 app.get("/api/clients/:id", (req, res) => {
@@ -417,7 +449,7 @@ app.get("/api/clients/:id", (req, res) => {
   if (!clientId) return;
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
-  res.json({ client });
+  res.json({ client: hydrateLumixClient(client) });
 });
 
 app.put("/api/clients/:id/intake", (req, res) => {
@@ -457,11 +489,11 @@ app.put("/api/clients/:id/intake", (req, res) => {
   res.json({
     businessProfile,
     intakeAnswers: answers,
-    client: database.getClientById(user.agencyId, clientId)
+    client: hydrateLumixClient(database.getClientById(user.agencyId, clientId))
   });
 });
 
-app.post("/api/clients/:id/recommendation", (req, res) => {
+app.post("/api/clients/:id/recommendation", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
@@ -477,18 +509,27 @@ app.post("/api/clients/:id/recommendation", (req, res) => {
     strategyRecommendation: client.strategyRecommendation || null
   });
 
-  const recommendation = database.upsertStrategyRecommendation(clientId, actionResult.recommendation);
+  if (!actionResult.ready || !actionResult.recommendation) {
+    return res.status(400).json({
+      error: actionResult.explanation?.reason || "Recommendation is not allowed yet.",
+      lumixAction: lumixActionPayload(actionResult)
+    });
+  }
 
-  res.json({
-    recommendation,
-    lumixAction: {
-      action: actionResult.action,
-      objectCount: actionResult.objects.all.length,
-      linkCount: actionResult.links.length,
-      explanation: actionResult.explanation || null
-    },
-    client: database.getClientById(user.agencyId, clientId)
-  });
+  try {
+    const recommendation = await generateAndSaveStrategy(database, clientId);
+
+    res.json({
+      recommendation,
+      lumixAction: lumixActionPayload(actionResult),
+      client: hydrateLumixClient(database.getClientById(user.agencyId, clientId))
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Strategy generation failed.",
+      lumixAction: lumixActionPayload(actionResult)
+    });
+  }
 });
 
 app.post("/api/clients/:id/lumix-assist", async (req, res) => {
@@ -513,7 +554,7 @@ app.post("/api/clients/:id/lumix-assist", async (req, res) => {
 
     res.json({
       assist,
-      client: database.getClientById(user.agencyId, clientId)
+      client: hydrateLumixClient(database.getClientById(user.agencyId, clientId))
     });
   } catch (error) {
     res.status(500).json({
@@ -564,6 +605,13 @@ app.post("/api/clients/:id/generate", (req, res) => {
     strategyRecommendation: client.strategyRecommendation || null
   });
 
+  if (!actionResult.ready) {
+    return res.status(400).json({
+      error: actionResult.explanation?.reason || "Generate is not allowed yet.",
+      lumixAction: lumixActionPayload(actionResult)
+    });
+  }
+
   const job = queue.enqueue({
     agencyId: user.agencyId,
     clientId: client.id,
@@ -573,14 +621,79 @@ app.post("/api/clients/:id/generate", (req, res) => {
 
   res.json({
     job,
-    lumixAction: {
-      action: actionResult.action,
-      objectCount: actionResult.objects.all.length,
-      linkCount: actionResult.links.length,
-      explanation: actionResult.explanation || null,
-      ready: Boolean(actionResult.ready)
-    }
+    lumixAction: lumixActionPayload(actionResult)
   });
+});
+
+app.post("/api/clients/:id/generate-all", async (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  const clientId = Number(req.params.id);
+  let client = database.getClientById(user.agencyId, clientId);
+  if (!client) return res.status(404).json({ error: "Client not found." });
+
+  if (!client.strategyRecommendation) {
+    const recommendationAction = runLumixAction("recommend_strategy", {
+      client,
+      businessProfile: client.businessProfile,
+      intakeAnswers: client.intakeAnswers || [],
+      strategyRecommendation: client.strategyRecommendation || null
+    });
+
+    if (!recommendationAction.ready || !recommendationAction.recommendation) {
+      return res.status(400).json({
+        error: recommendationAction.explanation?.reason || "Strategy generation is not allowed yet.",
+        lumixAction: lumixActionPayload(recommendationAction)
+      });
+    }
+
+    try {
+      await generateAndSaveStrategy(database, clientId);
+      client = database.getClientById(user.agencyId, clientId);
+    } catch (error) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Strategy generation failed."
+      });
+    }
+  }
+
+  const actionResult = runLumixAction("generate_pack", {
+    client,
+    businessProfile: client.businessProfile,
+    intakeAnswers: client.intakeAnswers || [],
+    strategyRecommendation: client.strategyRecommendation || null
+  });
+
+  if (!actionResult.ready) {
+    return res.status(400).json({
+      error: actionResult.explanation?.reason || "Generate is not allowed yet.",
+      lumixAction: lumixActionPayload(actionResult)
+    });
+  }
+
+  try {
+    const refreshedClient = await generateAndPersistClient(clientId, "manual");
+    res.json({
+      ok: true,
+      clientId,
+      strategySummary: refreshedClient.strategyRecommendation?.summary || "",
+      strategy: refreshedClient.strategyRecommendation?.strategy || null,
+      content: {
+        landingPage: refreshedClient.website,
+        seo: refreshedClient.seo,
+        blogs: refreshedClient.blogs
+      },
+      updatedAt: refreshedClient.updatedAt,
+      lumixAction: lumixActionPayload(actionResult),
+      client: hydrateLumixClient(refreshedClient)
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Generate all failed.",
+      lumixAction: lumixActionPayload(actionResult)
+    });
+  }
 });
 
 app.post("/api/clients/:id/checkout", async (req, res) => {
@@ -682,6 +795,13 @@ app.post("/api/clients/:id/publish", (req, res) => {
     targetId
   });
 
+  if (!actionResult.ready) {
+    return res.status(400).json({
+      error: actionResult.explanation?.reason || "Publish is not allowed yet.",
+      lumixAction: lumixActionPayload(actionResult)
+    });
+  }
+
   const job = queue.enqueue({
     agencyId: user.agencyId,
     clientId: client.id,
@@ -693,14 +813,7 @@ app.post("/api/clients/:id/publish", (req, res) => {
 
   res.json({
     job,
-    lumixAction: {
-      action: actionResult.action,
-      objectCount: actionResult.objects.all.length,
-      linkCount: actionResult.links.length,
-      explanation: actionResult.explanation || null,
-      ready: Boolean(actionResult.ready),
-      targetCount: actionResult.targetCount || 0
-    }
+    lumixAction: lumixActionPayload(actionResult)
   });
 });
 
@@ -865,11 +978,15 @@ app.get("/client/:id", (_req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  res.redirect("/webbom");
+  res.redirect("/lumix");
+});
+
+app.get("/lumix", (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
 });
 
 app.get("/webbom", (_req, res) => {
-  res.sendFile(path.join(publicDir, "index.html"));
+  res.redirect("/lumix");
 });
 
 app.get("/login", (_req, res) => {
@@ -889,9 +1006,9 @@ app.get("/app", (_req, res) => {
 });
 
 app.get("*", (_req, res) => {
-  res.redirect("/webbom");
+  res.redirect("/lumix");
 });
 
 app.listen(port, host, () => {
-  console.log(`Autonomous Agency running on ${appUrl}`);
+  console.log(`Lumix running on ${appUrl}`);
 });

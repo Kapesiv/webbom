@@ -122,10 +122,32 @@ function buildPrompt({ businessName, description, plan, customPrompt }) {
   return lines.join("\n");
 }
 
+function buildStrategyOverlay(strategyRecommendation) {
+  if (!strategyRecommendation) return "";
+
+  const strategy = strategyRecommendation.strategy || strategyRecommendation;
+  const contentAngles = Array.isArray(strategy.contentAngles) ? strategy.contentAngles.join(", ") : "";
+  const homepageStructure = Array.isArray(strategy.homepageStructure)
+    ? strategy.homepageStructure.join(", ")
+    : "";
+
+  return [
+    "Approved Lumix strategy to follow:",
+    `- Positioning: ${strategy.positioning || ""}`,
+    `- Primary offer: ${strategy.primaryOffer || ""}`,
+    `- Primary audience: ${strategy.primaryAudience || ""}`,
+    `- CTA strategy: ${strategy.ctaStrategy || ""}`,
+    `- Content angles: ${contentAngles}`,
+    `- Homepage structure: ${homepageStructure}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function buildLumixAssistPrompt({ client, message }) {
   return [
     buildLumixPromptHeader(),
-    "You are answering inside the Lumix mini assistant in Webbom.",
+    "You are answering inside the Lumix mini assistant in the Lumix app.",
     "Reply in Finnish.",
     "Be concise, practical, and helpful.",
     "If the user's idea implies better profile settings, return them in suggestedUpdates.",
@@ -308,6 +330,23 @@ export function createAgencyService() {
     };
   }
 
+  async function generateAllForClient({ client: currentClient }) {
+    const customPrompt = [
+      currentClient.customPrompt || "",
+      buildStrategyOverlay(currentClient.strategyRecommendation),
+      buildLumixContext(currentClient)
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    return generatePack({
+      businessName: currentClient.businessName,
+      description: currentClient.description,
+      plan: currentClient.plan || "starter",
+      customPrompt
+    });
+  }
+
   async function assistLumix({ client: currentClient, message }) {
     if (!client) {
       return buildDemoLumixAssistResponse({ client: currentClient, message });
@@ -337,6 +376,7 @@ export function createAgencyService() {
     model,
     live: Boolean(client),
     generatePack,
+    generateAllForClient,
     assistLumix
   };
 }

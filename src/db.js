@@ -29,6 +29,10 @@ function serializeJson(value) {
   return JSON.stringify(value ?? null);
 }
 
+function summarizeStrategyPayload(strategy) {
+  return [strategy?.positioning, strategy?.ctaStrategy].filter(Boolean).join(" • ").slice(0, 280);
+}
+
 function mapAgency(row) {
   return row
     ? {
@@ -235,20 +239,34 @@ function mapIntakeAnswer(row) {
 }
 
 function mapStrategyRecommendation(row) {
-  return row
-    ? {
-        id: row.id,
-        clientId: row.client_id,
-        positioning: row.positioning,
-        primaryOffer: row.primary_offer,
-        primaryAudience: row.primary_audience,
-        contentAngles: parseJson(row.content_angles_json, []),
-        ctaStrategy: row.cta_strategy,
-        homepageStructure: parseJson(row.homepage_structure_json, []),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      }
-    : null;
+  if (!row) return null;
+
+  const strategy = parseJson(row.strategy_json, null) || {
+    version: "v1",
+    status: row.status || "approved",
+    positioning: row.positioning,
+    primaryOffer: row.primary_offer,
+    primaryAudience: row.primary_audience,
+    contentAngles: parseJson(row.content_angles_json, []),
+    ctaStrategy: row.cta_strategy,
+    homepageStructure: parseJson(row.homepage_structure_json, [])
+  };
+
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    status: strategy.status || "approved",
+    positioning: strategy.positioning || null,
+    primaryOffer: strategy.primaryOffer || null,
+    primaryAudience: strategy.primaryAudience || null,
+    contentAngles: Array.isArray(strategy.contentAngles) ? strategy.contentAngles : [],
+    ctaStrategy: strategy.ctaStrategy || null,
+    homepageStructure: Array.isArray(strategy.homepageStructure) ? strategy.homepageStructure : [],
+    summary: row.strategy_summary || summarizeStrategyPayload(strategy),
+    strategy,
+    createdAt: row.created_at,
+    updatedAt: row.strategy_updated_at || row.updated_at
+  };
 }
 
 function mapJob(row) {
@@ -533,6 +551,10 @@ export function createDatabase() {
     CREATE TABLE IF NOT EXISTS strategy_recommendations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       client_id INTEGER NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'approved',
+      strategy_json TEXT,
+      strategy_summary TEXT,
+      strategy_updated_at TEXT,
       positioning TEXT,
       primary_offer TEXT,
       primary_audience TEXT,
@@ -549,6 +571,55 @@ export function createDatabase() {
   if (!columnExists("users", "role")) db.exec("ALTER TABLE users ADD COLUMN role TEXT");
   if (!columnExists("clients", "agency_id")) db.exec("ALTER TABLE clients ADD COLUMN agency_id INTEGER");
   if (!columnExists("clients", "custom_prompt")) db.exec("ALTER TABLE clients ADD COLUMN custom_prompt TEXT");
+  if (!columnExists("strategy_recommendations", "status")) {
+    db.exec("ALTER TABLE strategy_recommendations ADD COLUMN status TEXT");
+  }
+  if (!columnExists("strategy_recommendations", "strategy_json")) {
+    db.exec("ALTER TABLE strategy_recommendations ADD COLUMN strategy_json TEXT");
+  }
+  if (!columnExists("strategy_recommendations", "strategy_summary")) {
+    db.exec("ALTER TABLE strategy_recommendations ADD COLUMN strategy_summary TEXT");
+  }
+  if (!columnExists("strategy_recommendations", "strategy_updated_at")) {
+    db.exec("ALTER TABLE strategy_recommendations ADD COLUMN strategy_updated_at TEXT");
+  }
+
+  run(
+    `
+      UPDATE strategy_recommendations
+      SET status = 'approved'
+      WHERE status IS NULL
+         OR status = ''
+    `
+  );
+
+  all(`SELECT * FROM strategy_recommendations WHERE strategy_json IS NULL OR strategy_json = ''`).forEach((row) => {
+    const legacyStrategy = {
+      version: "v1",
+      status: row.status || "approved",
+      positioning: row.positioning || null,
+      primaryOffer: row.primary_offer || null,
+      primaryAudience: row.primary_audience || null,
+      contentAngles: parseJson(row.content_angles_json, []),
+      ctaStrategy: row.cta_strategy || null,
+      homepageStructure: parseJson(row.homepage_structure_json, [])
+    };
+    const strategyUpdatedAt = row.updated_at || row.created_at || nowIso();
+
+    run(
+      `
+        UPDATE strategy_recommendations
+        SET strategy_json = ?,
+            strategy_summary = ?,
+            strategy_updated_at = ?
+        WHERE client_id = ?
+      `,
+      serializeJson(legacyStrategy),
+      summarizeStrategyPayload(legacyStrategy),
+      strategyUpdatedAt,
+      row.client_id
+    );
+  });
 
   run(
     `
@@ -1090,29 +1161,34 @@ export function createDatabase() {
     return mapStrategyRecommendation(get(`SELECT * FROM strategy_recommendations WHERE client_id = ?`, clientId));
   }
 
-  function upsertStrategyRecommendation(clientId, input = {}) {
+  function saveClientStrategy(clientId, strategy = {}) {
     const existing = get(`SELECT * FROM strategy_recommendations WHERE client_id = ?`, clientId);
     const stamp = nowIso();
+    const status = strategy.status || "approved";
+    const summary = strategy.summary || summarizeStrategyPayload(strategy);
+    const strategyJson = serializeJson(strategy);
 
     if (existing) {
       run(
         `
           UPDATE strategy_recommendations
-          SET positioning = ?,
-              primary_offer = ?,
-              primary_audience = ?,
-              content_angles_json = ?,
-              cta_strategy = ?,
-              homepage_structure_json = ?,
+          SET status = ?,
+              strategy_json = ?,
+              strategy_summary = ?,
+              strategy_updated_at = ?,
+              positioning = NULL,
+              primary_offer = NULL,
+              primary_audience = NULL,
+              content_angles_json = NULL,
+              cta_strategy = NULL,
+              homepage_structure_json = NULL,
               updated_at = ?
           WHERE client_id = ?
         `,
-        input.positioning || null,
-        input.primaryOffer || null,
-        input.primaryAudience || null,
-        serializeJson(input.contentAngles || []),
-        input.ctaStrategy || null,
-        serializeJson(input.homepageStructure || []),
+        status,
+        strategyJson,
+        summary,
+        stamp,
         stamp,
         clientId
       );
@@ -1120,24 +1196,35 @@ export function createDatabase() {
       run(
         `
           INSERT INTO strategy_recommendations (
-            client_id, positioning, primary_offer, primary_audience, content_angles_json,
+            client_id, status, strategy_json, strategy_summary, strategy_updated_at,
+            positioning, primary_offer, primary_audience, content_angles_json,
             cta_strategy, homepage_structure_json, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)
         `,
         clientId,
-        input.positioning || null,
-        input.primaryOffer || null,
-        input.primaryAudience || null,
-        serializeJson(input.contentAngles || []),
-        input.ctaStrategy || null,
-        serializeJson(input.homepageStructure || []),
+        status,
+        strategyJson,
+        summary,
         stamp,
         stamp
       );
     }
 
     return getStrategyRecommendation(clientId);
+  }
+
+  function upsertStrategyRecommendation(clientId, input = {}) {
+    return saveClientStrategy(clientId, {
+      version: "v1",
+      status: input.status || "approved",
+      positioning: input.positioning || null,
+      primaryOffer: input.primaryOffer || null,
+      primaryAudience: input.primaryAudience || null,
+      contentAngles: input.contentAngles || [],
+      ctaStrategy: input.ctaStrategy || null,
+      homepageStructure: input.homepageStructure || []
+    });
   }
 
   function hydrateClient(row) {
@@ -1906,6 +1993,7 @@ export function createDatabase() {
     listIntakeAnswersForClient,
     saveIntakeAnswers,
     getStrategyRecommendation,
+    saveClientStrategy,
     upsertStrategyRecommendation,
     enqueueJob,
     getJob,

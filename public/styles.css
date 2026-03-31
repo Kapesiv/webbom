@@ -780,6 +780,21 @@ body {
   font-weight: 600;
 }
 
+.landing-links-row a {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(125, 211, 252, 0.06);
+  color: var(--accent-2);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.landing-links-row a:hover {
+  background: rgba(125, 211, 252, 0.12);
+}
+
 .control-stat {
   padding: 16px;
   border-radius: 12px;
@@ -1284,6 +1299,13 @@ h4 {
   margin-top: 14px;
 }
 
+.primary-flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
 .stage-subdetails {
   margin-top: 14px;
   padding: 14px 16px;
@@ -1785,7 +1807,7 @@ textarea {
 
 .lumix-coach-head {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 12px;
   align-items: center;
 }
@@ -1861,6 +1883,13 @@ textarea {
   justify-content: flex-start;
 }
 
+.lumix-coach-hide {
+  min-width: 0;
+  width: auto;
+  padding: 8px 12px;
+  justify-self: end;
+}
+
 .lumix-coach-step {
   display: grid;
   gap: 8px;
@@ -1890,6 +1919,26 @@ textarea {
 
 .lumix-coach-dismiss {
   margin-top: -2px;
+}
+
+.lumix-coach-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: auto;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: rgba(6, 12, 20, 0.96);
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+}
+
+.lumix-coach-toggle .lumix-coach-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 0.84rem;
 }
 
 .guide-highlight {
@@ -2095,5 +2144,15 @@ textarea {
 
   .lumix-coach-actions button:last-child {
     grid-column: auto;
+  }
+
+  .lumix-coach-head {
+    grid-template-columns: auto 1fr;
+  }
+
+  .lumix-coach-hide {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    width: 100%;
   }
 }
