@@ -31,6 +31,7 @@ const publicDir = path.join(__dirname, "..", "public");
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 3000);
 const appUrl = process.env.APP_URL || `http://${host}:${port}`;
+const siteUrl = appUrl.replace(/\/$/, "");
 
 const database = createDatabase();
 const auth = createAuthService(database);
@@ -238,6 +239,40 @@ app.get("/api/lumix", (_req, res) => {
     model: getLumixOntologyModel(),
     codex: getLumixHumanCodex()
   });
+});
+
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send(`User-agent: *
+Allow: /
+
+Sitemap: ${siteUrl}/sitemap.xml
+`);
+});
+
+app.get("/sitemap.xml", (_req, res) => {
+  const now = new Date().toISOString();
+  const urls = [
+    { loc: `${siteUrl}/`, priority: "1.0" },
+    { loc: `${siteUrl}/lumix`, priority: "0.9" },
+    { loc: `${siteUrl}/login`, priority: "0.4" },
+    { loc: `${siteUrl}/register`, priority: "0.4" }
+  ];
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls
+  .map(
+    (entry) => `  <url>
+    <loc>${entry.loc}</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${entry.priority}</priority>
+  </url>`
+  )
+  .join("\n")}
+</urlset>`;
+
+  res.type("application/xml").send(xml);
 });
 
 app.post("/api/auth/register", (req, res) => {
