@@ -3,391 +3,672 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lumix | Build your marketing and website in one flow</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/styles.css" />
+    <title>Lumix</title>
+    <style>
+      :root {
+        --bg: #f7f1eb;
+        --surface: rgba(255, 255, 255, 0.72);
+        --surface-strong: #ffffff;
+        --text: #3d2c28;
+        --muted: #7f6b64;
+        --border: rgba(90, 64, 55, 0.1);
+        --primary: #9b7568;
+        --primary-dark: #7f5d52;
+        --shadow: 0 20px 60px rgba(61, 44, 40, 0.08);
+        --radius: 24px;
+        --max: 1200px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(201, 173, 161, 0.18), transparent 35%),
+          linear-gradient(180deg, #fbf7f3 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .container {
+        width: min(var(--max), calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 24px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+
+      .brand-mark {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #e6c6a8, #b48273);
+        box-shadow: 0 8px 18px rgba(180, 130, 115, 0.25);
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .nav-right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .btn {
+        border: 0;
+        border-radius: 16px;
+        padding: 14px 22px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 10px 24px rgba(155, 117, 104, 0.25);
+      }
+
+      .btn-primary:hover {
+        background: var(--primary-dark);
+      }
+
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.05fr 1fr;
+        gap: 64px;
+        align-items: center;
+        padding: 44px 0 72px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #a07a6c;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(48px, 7vw, 88px);
+        line-height: 0.95;
+        letter-spacing: -0.055em;
+        max-width: 720px;
+      }
+
+      .hero p {
+        margin: 28px 0 0;
+        max-width: 600px;
+        font-size: 21px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 16px;
+        margin-top: 34px;
+        flex-wrap: wrap;
+      }
+
+      .hero-meta {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-top: 32px;
+      }
+
+      .hero-meta-card {
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 16px 18px;
+        min-width: 150px;
+        box-shadow: var(--shadow);
+      }
+
+      .hero-meta-value {
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      .hero-meta-label {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .product {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        padding: 18px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .product-window {
+        background: #f9f4ef;
+        border: 1px solid rgba(90, 64, 55, 0.08);
+        border-radius: 22px;
+        padding: 18px;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 18px;
+        min-height: 520px;
+      }
+
+      .sidebar {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 20px 16px;
+      }
+
+      .sidebar-title {
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #9a786c;
+        margin-bottom: 16px;
+        font-weight: 700;
+      }
+
+      .sidebar-item {
+        padding: 12px 14px;
+        border-radius: 14px;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .sidebar-item.active {
+        background: #efe3da;
+        color: var(--text);
+      }
+
+      .canvas {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 14px 16px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: #efe7df;
+        color: #7d6156;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .preview {
+        background: linear-gradient(180deg, #f8ede7 0%, #efe4d8 100%);
+        border: 1px solid rgba(90, 64, 55, 0.08);
+        border-radius: 24px;
+        padding: 36px;
+        min-height: 380px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .preview::after {
+        content: "";
+        position: absolute;
+        right: -40px;
+        bottom: -40px;
+        width: 220px;
+        height: 220px;
+        background: rgba(198, 210, 179, 0.45);
+        border-radius: 50%;
+        filter: blur(2px);
+      }
+
+      .preview-label {
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #8f6f63;
+        font-weight: 700;
+        position: relative;
+        z-index: 1;
+      }
+
+      .preview h2 {
+        font-size: clamp(34px, 4vw, 56px);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+        margin: 16px 0;
+        max-width: 520px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .preview p {
+        max-width: 500px;
+        color: var(--muted);
+        font-size: 19px;
+        line-height: 1.6;
+        margin: 0 0 22px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .preview-actions {
+        display: flex;
+        gap: 12px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .small-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+
+      .small-card {
+        background: rgba(255, 255, 255, 0.76);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+      }
+
+      .small-card-title {
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #987569;
+        margin-bottom: 8px;
+        font-weight: 700;
+      }
+
+      .small-card-value {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .section {
+        padding: 84px 0;
+      }
+
+      .section-header {
+        max-width: 680px;
+        margin: 0 auto 42px;
+        text-align: center;
+      }
+
+      .section-header h3 {
+        margin: 0;
+        font-size: clamp(32px, 4vw, 52px);
+        letter-spacing: -0.04em;
+      }
+
+      .section-header p {
+        margin: 16px 0 0;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.7;
+      }
+
+      .steps,
+      .features {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .card-number {
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: #efe3da;
+        color: #7d6156;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        margin-bottom: 18px;
+      }
+
+      .card h4 {
+        margin: 0 0 10px;
+        font-size: 24px;
+        letter-spacing: -0.03em;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+        font-size: 16px;
+      }
+
+      .final-cta {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.92) 100%);
+        border: 1px solid var(--border);
+        border-radius: 32px;
+        padding: 48px;
+        box-shadow: var(--shadow);
+        text-align: center;
+      }
+
+      .final-cta h3 {
+        margin: 0;
+        font-size: clamp(34px, 4vw, 56px);
+        letter-spacing: -0.04em;
+      }
+
+      .final-cta p {
+        margin: 16px auto 0;
+        max-width: 640px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.7;
+      }
+
+      .final-cta .hero-actions {
+        justify-content: center;
+        margin-top: 28px;
+      }
+
+      footer {
+        padding: 36px 0 54px;
+        color: var(--muted);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      @media (max-width: 1024px) {
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+
+        .product-window {
+          grid-template-columns: 1fr;
+        }
+
+        .steps,
+        .features,
+        .small-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .nav-links {
+          display: none;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .hero-actions,
+        .nav-right {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .container {
+          width: min(var(--max), calc(100% - 24px));
+        }
+
+        .final-cta,
+        .card,
+        .product {
+          padding: 22px;
+        }
+
+        .preview {
+          padding: 24px;
+        }
+
+        h1 {
+          font-size: 48px;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div class="lumix-landing">
-      <main class="lumix-shell">
-        <header class="lumix-topbar">
-          <a class="lumix-brand" href="/">
-            <span class="lumix-brand-mark" aria-hidden="true"></span>
-            <span class="lumix-brand-word">Lumix</span>
-          </a>
+    <div class="container">
+      <nav class="nav">
+        <a href="/lumix" class="brand">
+          <span class="brand-mark"></span>
+          <span>Lumix</span>
+        </a>
 
-          <nav class="lumix-nav" aria-label="Primary">
-            <a href="#features">Features</a>
-            <a href="#how-it-works">How it works</a>
-            <a href="#cta">Pricing</a>
-          </nav>
-
-          <div class="lumix-top-actions">
-            <a class="lumix-button lumix-button-secondary" href="/login">Log in</a>
-            <a class="lumix-button lumix-button-primary" href="/register">Start free trial</a>
-          </div>
-        </header>
-
-      <section class="lumix-hero">
-        <div class="lumix-hero-copy">
-          <p class="lumix-kicker">AI-powered marketing workspace</p>
-          <h1>Build your marketing and website in one flow.</h1>
-          <p class="lumix-lede">
-            From business info to live site, content, and SEO. Lumix brings your website, content
-            engine, performance tracking, and publishing workflow into one calm workspace.
-          </p>
-
-          <div class="lumix-hero-actions">
-            <a class="lumix-button lumix-button-primary" href="/register">Start free trial</a>
-            <a class="lumix-button lumix-button-secondary" href="/register">Book a demo</a>
-          </div>
-
-          <div class="lumix-proof-row">
-            <div class="lumix-proof-chip">
-              <strong>4.8/5</strong>
-              <span>Rated by growing service teams</span>
-            </div>
-            <div class="lumix-proof-chip">
-              <strong>One workspace</strong>
-              <span>Pages, SEO, analytics, publishing</span>
-            </div>
-            <div class="lumix-proof-chip">
-              <strong>Live in days</strong>
-              <span>From idea to published system</span>
-            </div>
-          </div>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#pricing">Pricing</a>
         </div>
 
-        <div class="lumix-hero-visual">
-          <div class="lumix-app-frame">
-            <div class="lumix-browser-bar">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-
-            <div class="lumix-app-grid">
-              <aside class="lumix-sidebar">
-                <div class="lumix-sidebar-brand">
-                  <strong>Lumix</strong>
-                  <span>Summer Campaign</span>
-                </div>
-
-                <nav class="lumix-sidebar-nav" aria-label="Workspace sections">
-                  <a class="is-active" href="#features">Pages</a>
-                  <a href="#features">Content</a>
-                  <a href="#features">SEO</a>
-                  <a href="#features">Analytics</a>
-                  <a href="#features">Settings</a>
-                </nav>
-
-                <div class="lumix-sidebar-card">
-                  <span>AI Assistant</span>
-                  <p>Generate homepage</p>
-                  <p>Write launch email</p>
-                </div>
-              </aside>
-
-              <section class="lumix-workspace">
-                <div class="lumix-workspace-top">
-                  <div>
-                    <p class="lumix-micro-label">Website Preview</p>
-                    <strong>positiva</strong>
-                  </div>
-                  <div class="lumix-mini-badges">
-                    <span>SEO ready</span>
-                    <span>Draft live</span>
-                  </div>
-                </div>
-
-                <div class="lumix-preview-surface">
-                  <div class="lumix-preview-copy">
-                    <p class="lumix-kicker">Smart website</p>
-                    <h2>Helping brands grow with smart marketing.</h2>
-                    <p>
-                      We create content and websites that bring real results with one unified
-                      workflow.
-                    </p>
-                    <div class="lumix-preview-actions">
-                      <span>Get in touch</span>
-                      <span>Learn more</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="lumix-metrics-row">
-                  <article>
-                    <span>Pages</span>
-                    <strong>12</strong>
-                    <p>Homepage, about, services, blog</p>
-                  </article>
-                  <article>
-                    <span>Generated Content</span>
-                    <strong>34</strong>
-                    <p>Landing pages, blogs, email copy</p>
-                  </article>
-                  <article>
-                    <span>Visitors</span>
-                    <strong>7.1k</strong>
-                    <p>+18% from last 30 days</p>
-                  </article>
-                </div>
-              </section>
-            </div>
-
-            <aside class="lumix-floating-card lumix-assistant-card">
-              <p class="lumix-micro-label">AI Assistant</p>
-              <strong>Suggested next actions</strong>
-              <ul>
-                <li>Generate homepage sections</li>
-                <li>Write blog post for "smart growth"</li>
-                <li>Fix missing SEO description</li>
-              </ul>
-            </aside>
-
-            <aside class="lumix-floating-card lumix-seo-card">
-              <p class="lumix-micro-label">SEO Tools</p>
-              <strong>Score 87</strong>
-              <div class="lumix-score-list">
-                <span><i></i>Keyword coverage</span>
-                <span><i></i>Meta description</span>
-                <span><i></i>Heading structure</span>
-              </div>
-            </aside>
-          </div>
+        <div class="nav-right">
+          <a href="/login" style="color: var(--muted); font-weight: 600">Log in</a>
+          <a href="/register" class="btn btn-primary">Start free trial</a>
         </div>
-      </section>
+      </nav>
 
-      <section class="lumix-trust-row" aria-label="Social proof">
-        <div>Google <strong>4.8</strong></div>
-        <div>Trusted by growing businesses</div>
-        <div>Fast website launches</div>
-        <div>SEO + analytics included</div>
-      </section>
-
-      <section id="features" class="lumix-section">
-        <div class="lumix-section-head">
-          <div>
-            <p class="lumix-kicker">Product overview</p>
-            <h2>A real marketing system, not just a page builder.</h2>
-          </div>
-          <p>
-            Lumix keeps your site structure, content generation, SEO, analytics, and publishing in
-            one connected dashboard so the whole workflow stays clear.
-          </p>
-        </div>
-
-        <div class="lumix-overview-grid">
-          <article class="lumix-overview-panel">
-            <div class="lumix-overview-main">
-              <div class="lumix-overview-sidebar">
-                <span>Workspace</span>
-                <strong>Main Dashboard</strong>
-                <ul>
-                  <li>Pages</li>
-                  <li>Content</li>
-                  <li>SEO</li>
-                  <li>Analytics</li>
-                  <li>Settings</li>
-                </ul>
-              </div>
-
-              <div class="lumix-overview-canvas">
-                <div class="lumix-overview-toolbar">
-                  <span>Homepage draft</span>
-                  <span>Audience: Small business owners</span>
-                  <span>Ready to publish</span>
-                </div>
-
-                <div class="lumix-overview-content">
-                  <section class="lumix-overview-preview">
-                    <p class="lumix-micro-label">Live preview</p>
-                    <h3>Build a website that grows with your business.</h3>
-                    <p>
-                      Lumix arranges messaging, structure, and content from the same business brief.
-                    </p>
-                    <div class="lumix-structure-list">
-                      <span>Hero</span>
-                      <span>Services</span>
-                      <span>Proof</span>
-                      <span>CTA</span>
-                    </div>
-                  </section>
-
-                  <aside class="lumix-assistant-panel">
-                    <p class="lumix-micro-label">AI Assistant</p>
-                    <strong>Guides the next step</strong>
-                    <div class="lumix-assistant-suggestions">
-                      <span>Generate homepage</span>
-                      <span>Write blog post</span>
-                      <span>Refresh keyword set</span>
-                    </div>
-                  </aside>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <div class="lumix-overview-stack">
-            <article class="lumix-side-card">
-              <p class="lumix-micro-label">Connected workflow</p>
-              <strong>One brief feeds the whole system.</strong>
-              <p>
-                Business details become page structure, blog topics, SEO improvements, and publish
-                actions without moving across separate tools.
-              </p>
-            </article>
-
-            <article class="lumix-side-card">
-              <p class="lumix-micro-label">Publishing</p>
-              <strong>Go live when everything is ready.</strong>
-              <div class="lumix-publish-status">
-                <span>Domain connected</span>
-                <span>SEO checklist complete</span>
-                <span>Analytics tracking installed</span>
-              </div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="lumix-section">
-        <div class="lumix-section-head">
-          <div>
-            <p class="lumix-kicker">Core features</p>
-            <h2>Everything needed to build and run marketing from one place.</h2>
-          </div>
-        </div>
-
-        <div class="lumix-feature-grid">
-          <article class="lumix-feature-card">
-            <p class="lumix-micro-label">AI Assistant</p>
-            <h3>Acts like a strategist inside the workflow.</h3>
-            <div class="lumix-chat-list">
-              <span>Generate homepage</span>
-              <span>Write blog post</span>
-              <span>Suggest stronger CTA</span>
-            </div>
-          </article>
-
-          <article class="lumix-feature-card">
-            <p class="lumix-micro-label">Website builder</p>
-            <h3>Edit structure and preview the page live.</h3>
-            <div class="lumix-stack-mini">
-              <span>Hero section</span>
-              <span>Services block</span>
-              <span>Testimonials</span>
-            </div>
-          </article>
-
-          <article class="lumix-feature-card">
-            <p class="lumix-micro-label">Content generation</p>
-            <h3>Create landing pages, blog posts, and SEO text.</h3>
-            <div class="lumix-tone-row">
-              <span>Warm</span>
-              <span>Confident</span>
-              <span>For founders</span>
-            </div>
-          </article>
-
-          <article class="lumix-feature-card">
-            <p class="lumix-micro-label">SEO tools</p>
-            <h3>Track score, keywords, and what needs fixing.</h3>
-            <div class="lumix-score-panel">
-              <strong>87</strong>
-              <div>
-                <span>Keyword usage</span>
-                <span>Meta tags</span>
-                <span>Headings</span>
-              </div>
-            </div>
-          </article>
-
-          <article class="lumix-feature-card">
-            <p class="lumix-micro-label">Analytics</p>
-            <h3>See visitors, conversions, and trend lines.</h3>
-            <div class="lumix-chart-panel">
-              <span>Visitors 2,843</span>
-              <span>Conversions 124</span>
-              <span>+18% growth</span>
-            </div>
-          </article>
-
-          <article class="lumix-feature-card">
-            <p class="lumix-micro-label">Publish</p>
-            <h3>Connect the domain and push everything live.</h3>
-            <div class="lumix-publish-panel">
-              <span>Domain connected</span>
-              <span>SSL active</span>
-              <strong>Go live</strong>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="how-it-works" class="lumix-section lumix-section-compact">
-        <div class="lumix-section-head">
-          <div>
-            <p class="lumix-kicker">How it works</p>
-            <h2>Simple from first input to published system.</h2>
-          </div>
-        </div>
-
-        <div class="lumix-steps">
-          <article>
-            <span>1</span>
-            <strong>Add your business</strong>
-          </article>
-          <article>
-            <span>2</span>
-            <strong>Lumix suggests</strong>
-          </article>
-          <article>
-            <span>3</span>
-            <strong>Edit and generate</strong>
-          </article>
-          <article>
-            <span>4</span>
-            <strong>Publish</strong>
-          </article>
-        </div>
-      </section>
-
-      <section class="lumix-section lumix-benefits">
-        <div class="lumix-section-head">
-          <div>
-            <p class="lumix-kicker">Benefits</p>
-            <h2>Clear workflow, fewer tools, faster launch.</h2>
-          </div>
-          <p>
-            Lumix is designed so users immediately understand what happens next and how their whole
-            marketing setup moves forward.
-          </p>
-        </div>
-
-        <div class="lumix-benefit-list">
-          <div>Launch faster</div>
-          <div>No need for multiple tools</div>
-          <div>Clear workflow</div>
-        </div>
-      </section>
-
-      <section id="cta" class="lumix-final-cta">
+      <section class="hero">
         <div>
-          <p class="lumix-kicker">Ready to build smarter?</p>
-          <h2>Set up your website, content, and SEO from one place.</h2>
+          <div class="eyebrow">AI-powered marketing workspace</div>
+          <h1>Build your website and marketing in one place.</h1>
+          <p>
+            Lumix creates your website, content and SEO in one calm workflow from business info to a live-ready
+            marketing system.
+          </p>
+
+          <div class="hero-actions">
+            <a href="/register" class="btn btn-primary">Start free trial</a>
+            <a href="#how" class="btn btn-secondary">See how it works</a>
+          </div>
+
+          <div class="hero-meta">
+            <div class="hero-meta-card">
+              <div class="hero-meta-value">4.8/5</div>
+              <div class="hero-meta-label">Rated by early users</div>
+            </div>
+            <div class="hero-meta-card">
+              <div class="hero-meta-value">1 flow</div>
+              <div class="hero-meta-label">Website, content and SEO</div>
+            </div>
+            <div class="hero-meta-card">
+              <div class="hero-meta-value">Fast</div>
+              <div class="hero-meta-label">From idea to preview quickly</div>
+            </div>
+          </div>
         </div>
-        <div class="lumix-hero-actions">
-          <a class="lumix-button lumix-button-primary" href="/register">Start free trial</a>
-          <a class="lumix-button lumix-button-secondary" href="/register">Book a demo</a>
+
+        <div class="product">
+          <div class="product-window">
+            <aside class="sidebar">
+              <div class="sidebar-title">Lumix workspace</div>
+              <div class="sidebar-item active">Overview</div>
+              <div class="sidebar-item">Pages</div>
+              <div class="sidebar-item">Content</div>
+              <div class="sidebar-item">SEO</div>
+              <div class="sidebar-item">Analytics</div>
+              <div class="sidebar-item">Settings</div>
+            </aside>
+
+            <div class="canvas">
+              <div class="topbar">
+                <strong>Positiva campaign</strong>
+                <span class="status-pill">SEO ready</span>
+              </div>
+
+              <div class="preview">
+                <div class="preview-label">Website preview</div>
+                <h2>Helping brands grow with smart marketing.</h2>
+                <p>
+                  Lumix creates landing pages, blog content and SEO structure from one simple business flow.
+                </p>
+                <div class="preview-actions">
+                  <button class="btn btn-primary" type="button">Get in touch</button>
+                  <button class="btn btn-secondary" type="button">Learn more</button>
+                </div>
+              </div>
+
+              <div class="small-grid">
+                <div class="small-card">
+                  <div class="small-card-title">Pages</div>
+                  <div class="small-card-value">12</div>
+                </div>
+                <div class="small-card">
+                  <div class="small-card-title">Generated content</div>
+                  <div class="small-card-value">24</div>
+                </div>
+                <div class="small-card">
+                  <div class="small-card-title">Visitors</div>
+                  <div class="small-card-value">7.1k</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
-      </main>
     </div>
+
+    <section class="section" id="how">
+      <div class="container">
+        <div class="section-header">
+          <h3>How Lumix works</h3>
+          <p>
+            One simple flow: add your business, let Lumix build your strategy, then review your website, content and
+            SEO in one workspace.
+          </p>
+        </div>
+
+        <div class="steps">
+          <div class="card">
+            <div class="card-number">1</div>
+            <h4>Add your business</h4>
+            <p>Enter your company info, offer and audience. Lumix turns it into a clear marketing foundation.</p>
+          </div>
+          <div class="card">
+            <div class="card-number">2</div>
+            <h4>Generate everything</h4>
+            <p>Lumix creates your strategy, landing page, blog content and SEO structure from one flow.</p>
+          </div>
+          <div class="card">
+            <div class="card-number">3</div>
+            <h4>Review and publish</h4>
+            <p>Preview your content, make quick edits and publish it when it is ready.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-header">
+          <h3>Everything in one calm workspace</h3>
+          <p>
+            Instead of jumping between tools, Lumix keeps strategy, pages, content and SEO in one clear system.
+          </p>
+        </div>
+
+        <div class="features">
+          <div class="card">
+            <h4>Website creation</h4>
+            <p>Generate landing pages and page structure from business data and strategy.</p>
+          </div>
+          <div class="card">
+            <h4>Content engine</h4>
+            <p>Create blogs and core content that match your offer, audience and SEO goals.</p>
+          </div>
+          <div class="card">
+            <h4>SEO workflow</h4>
+            <p>Build primary keywords, metadata and content direction without extra tools.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="pricing">
+      <div class="container">
+        <div class="final-cta">
+          <h3>Ready to build smarter?</h3>
+          <p>
+            Start with one simple flow and turn your business info into a website, content and SEO system with Lumix.
+          </p>
+          <div class="hero-actions">
+            <a href="/register" class="btn btn-primary">Start free trial</a>
+            <a href="/login" class="btn btn-secondary">Log in</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>© 2026 Lumix. Build your website and marketing in one place.</footer>
   </body>
 </html>

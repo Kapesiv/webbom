@@ -21,75 +21,49 @@
 
       <section class="dashboard-shell">
         <aside class="client-rail">
+          <article class="panel simple-panel workflow-rail-panel" data-guide="core-flow">
+            <div class="panel-head">
+              <div>
+                <h2>Pääflow</h2>
+                <p id="flow-rail-caption">Yksi aktiivinen askel kerrallaan.</p>
+              </div>
+            </div>
+            <div id="flow-rail-list" class="rail-flow-list"></div>
+          </article>
+
+          <details class="panel add-client-panel" data-guide="new-client" open>
+            <summary>1. Lisää asiakas</summary>
+            <form id="client-form" class="magic-onboarding-form">
+              <article class="magic-onboarding-card">
+                <div class="magic-onboarding-head">
+                  <h2>Lisää asiakas</h2>
+                  <p>Yksi lyhyt business-kuvaus riittää alkuun.</p>
+                </div>
+
+                <textarea
+                  name="businessBrief"
+                  rows="5"
+                  class="magic-onboarding-input"
+                  aria-label="Kuvaa yritys lyhyesti"
+                  placeholder="Autamme hotellien ja luksuskotien sauna-projekteissa Suomessa."
+                  required
+                ></textarea>
+
+                <button type="submit">Luo asiakas</button>
+              </article>
+            </form>
+          </details>
+
           <article class="panel simple-panel" data-guide="clients">
             <div class="panel-head clients-head">
               <div>
                 <h2>Asiakkaat</h2>
-                <p>Valitse yksi asiakas ja vie flow maaliin.</p>
+                <p>Valitse yksi ja jatka flow'ta.</p>
               </div>
               <p id="clients-caption">0 asiakasta</p>
             </div>
             <div id="clients-list" class="client-selector"></div>
           </article>
-
-          <details class="panel add-client-panel" data-guide="new-client">
-            <summary>Uusi asiakas</summary>
-            <form id="client-form" class="stack-form">
-              <label>
-                <span>Yrityksen nimi</span>
-                <input name="businessName" placeholder="Nordic Sauna Studio" required />
-              </label>
-              <label>
-                <span>Kuvaus</span>
-                <textarea
-                  name="description"
-                  rows="4"
-                  placeholder="Mitä yritys tekee ja kenelle."
-                  required
-                ></textarea>
-              </label>
-
-              <details class="stage-subdetails">
-                <summary>Lisää tietoja</summary>
-                <label>
-                  <span>Lisäohje</span>
-                  <textarea
-                    name="customPrompt"
-                    rows="3"
-                    placeholder="Sävy, kohderyhmä ja toivottu suunta."
-                  ></textarea>
-                </label>
-                <div class="inline-grid">
-                  <label>
-                    <span>Taso</span>
-                    <select name="plan">
-                      <option value="starter">Starter</option>
-                      <option value="growth">Growth</option>
-                      <option value="scale">Scale</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Tahti</span>
-                    <select name="generationIntervalDays">
-                      <option value="7">7 päivää</option>
-                      <option value="14">14 päivää</option>
-                      <option value="30" selected>30 päivää</option>
-                    </select>
-                  </label>
-                </div>
-                <label class="checkbox-row">
-                  <input name="autoGenerate" type="checkbox" checked />
-                  <span>Generoi heti</span>
-                </label>
-                <label class="checkbox-row">
-                  <input name="scheduleEnabled" type="checkbox" checked />
-                  <span>Pidä ajastus päällä</span>
-                </label>
-              </details>
-
-              <button type="submit">Luo asiakas</button>
-            </form>
-          </details>
         </aside>
 
         <section class="workflow-shell" data-guide="workflow">

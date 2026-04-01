@@ -1,39 +1,221 @@
 <!DOCTYPE html>
-<html lang="fi">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kirjaudu | Lumix</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <title>Log in - Lumix</title>
+    <style>
+      :root {
+        --bg: #f7f1eb;
+        --surface: rgba(255, 255, 255, 0.82);
+        --text: #3d2c28;
+        --muted: #7f6b64;
+        --border: rgba(90, 64, 55, 0.1);
+        --primary: #9b7568;
+        --primary-dark: #7f5d52;
+        --shadow: 0 20px 60px rgba(61, 44, 40, 0.08);
+        --danger: #b05d55;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(201, 173, 161, 0.16), transparent 35%),
+          linear-gradient(180deg, #fbf7f3 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .auth-shell {
+        width: 100%;
+        max-width: 460px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 24px;
+        color: inherit;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #e6c6a8, #b48273);
+        box-shadow: 0 8px 18px rgba(180, 130, 115, 0.25);
+      }
+
+      .card {
+        padding: 34px;
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      h1 {
+        margin: 0;
+        text-align: center;
+        font-size: 36px;
+        letter-spacing: -0.04em;
+      }
+
+      .sub {
+        margin: 10px 0 28px;
+        text-align: center;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      label {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.86);
+        font-size: 16px;
+        outline: none;
+      }
+
+      input:focus {
+        border-color: #b48a7c;
+        box-shadow: 0 0 0 4px rgba(180, 138, 124, 0.14);
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 14px;
+      }
+
+      .row a,
+      .footer a {
+        color: #8a665a;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .btn {
+        width: 100%;
+        margin-top: 4px;
+        padding: 15px 18px;
+        border: 0;
+        border-radius: 16px;
+        background: var(--primary);
+        color: #fff;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 700;
+        transition: 0.2s ease;
+      }
+
+      .btn:hover {
+        background: var(--primary-dark);
+        transform: translateY(-1px);
+      }
+
+      .status {
+        min-height: 20px;
+        margin: 6px 0 0;
+        color: var(--danger);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .footer {
+        margin-top: 20px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      @media (max-width: 540px) {
+        .card {
+          padding: 26px 22px;
+          border-radius: 24px;
+        }
+
+        h1 {
+          font-size: 31px;
+        }
+      }
+    </style>
   </head>
   <body>
-    <main class="auth-shell">
-      <section class="auth-simple auth-layout">
-        <a class="auth-back-link" href="/lumix">Takaisin pääsivulle</a>
-        <p class="eyebrow">Lumix</p>
-        <h1>Kirjaudu</h1>
-        <p class="lede">Avaa työtila ja jatka siitä mihin jäit.</p>
+    <div class="auth-shell">
+      <a href="/lumix" class="brand">
+        <span class="brand-mark"></span>
+        <span>Lumix</span>
+      </a>
 
-        <form id="login-form" class="stack-form auth-card auth-panel">
-          <label>
-            <span>Sähköposti</span>
-            <input name="email" type="email" placeholder="owner@example.com" required />
-          </label>
-          <label>
-            <span>Salasana</span>
-            <input name="password" type="password" placeholder="Salasana" required />
-          </label>
-          <button type="submit">Kirjaudu</button>
+      <div class="card">
+        <h1>Welcome back</h1>
+        <p class="sub">Log in to continue building your website, content and SEO in Lumix.</p>
+
+        <form id="login-form" method="POST" action="/login">
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" placeholder="you@example.com" required />
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" placeholder="Enter your password" required />
+          </div>
+
+          <div class="row">
+            <span></span>
+            <a href="#">Forgot password?</a>
+          </div>
+
+          <button class="btn" type="submit">Log in</button>
         </form>
 
-        <p id="status-banner" class="auth-status" aria-live="polite"></p>
+        <p id="status-banner" class="status" aria-live="polite"></p>
 
-        <p class="auth-link-row">
-          Ei vielä tiliä?
-          <a href="/register">Rekisteröidy</a>
-        </p>
-      </section>
-    </main>
+        <div class="footer">
+          Don't have an account?
+          <a href="/register">Create account</a>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="/login.js"></script>
   </body>

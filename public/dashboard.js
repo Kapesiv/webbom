@@ -1,3 +1,5 @@
+import { clearAuthenticated, hasStoredAuth, markAuthenticated, redirectTo } from "./auth-state.js";
+
 const state = {
   bootstrap: null,
   activeClientId: null,
@@ -10,6 +12,8 @@ const state = {
 const summaryGrid = document.getElementById("summary-grid");
 const clientsList = document.getElementById("clients-list");
 const clientsCaption = document.getElementById("clients-caption");
+const flowRailList = document.getElementById("flow-rail-list");
+const flowRailCaption = document.getElementById("flow-rail-caption");
 const agencyTitle = document.getElementById("agency-title");
 const statusBanner = document.getElementById("status-banner");
 const teamList = document.getElementById("team-list");
@@ -108,6 +112,441 @@ function formatClientCount(count) {
   return `${count} ${count === 1 ? "asiakas" : "asiakasta"}`;
 }
 
+const magicLocationSignals = [
+  "Finland",
+  "Helsinki",
+  "Espoo",
+  "Tampere",
+  "Turku",
+  "Nordics",
+  "Europe",
+  "Remote",
+  "Online"
+];
+
+const magicPageLabels = {
+  hero: "Hero",
+  services: "Services",
+  "service-area": "Service area",
+  proof: "Proof",
+  cta: "CTA",
+  problem: "Problem",
+  offer: "Offer",
+  story: "Story",
+  bestsellers: "Best sellers",
+  benefits: "Benefits",
+  solution: "Solution",
+  "how-it-works": "How it works",
+  faq: "FAQ",
+  process: "Process",
+  insights: "Insights",
+  reviews: "Reviews"
+};
+
+const magicStopWords = new Set([
+  "a",
+  "an",
+  "and",
+  "build",
+  "business",
+  "for",
+  "from",
+  "grow",
+  "help",
+  "helps",
+  "in",
+  "into",
+  "of",
+  "on",
+  "our",
+  "that",
+  "the",
+  "their",
+  "to",
+  "want",
+  "we",
+  "who",
+  "with",
+  "your"
+]);
+
+const magicTopicPatterns = [
+  {
+    pattern: /\b(kitchen|cabinet|remodel|renovat)/i,
+    topic: "kitchen renovation",
+    category: "Kitchen renovation services",
+    name: "Kitchen Renovation"
+  },
+  {
+    pattern: /\b(marketing|seo|content|landing page|ads|campaign)/i,
+    topic: "marketing growth",
+    category: "Marketing growth services",
+    name: "Marketing Growth"
+  },
+  {
+    pattern: /\b(saas|software|platform|app|workflow|automation)/i,
+    topic: "workflow software",
+    category: "Workflow software",
+    name: "Workflow"
+  },
+  {
+    pattern: /\b(shop|store|ecommerce|product|products|skincare|jewelry|fashion)/i,
+    topic: "online store growth",
+    category: "Ecommerce brand",
+    name: "Growth Store"
+  },
+  {
+    pattern: /\b(salon|spa|wellness|beauty|facial|clinic|hair|skin)/i,
+    topic: "wellness services",
+    category: "Wellness and beauty services",
+    name: "Wellness"
+  },
+  {
+    pattern: /\b(coach|consult|advisor|creator|personal brand|speaker|mentor)/i,
+    topic: "expert consulting",
+    category: "Expert-led service",
+    name: "Expert Studio"
+  }
+];
+
+function toTitleCase(value) {
+  return String(value || "")
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function normalizeBrief(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getCatalogLabel(group, value) {
+  const option = getIntakeCatalog()[group]?.find((item) => item.value === value);
+  return option?.label || toTitleCase(value) || "Not set";
+}
+
+function extractGeoFocus(brief) {
+  const normalized = normalizeBrief(brief);
+  const knownMatch = magicLocationSignals.find((location) =>
+    normalized.toLowerCase().includes(location.toLowerCase())
+  );
+
+  if (knownMatch) return knownMatch;
+
+  const locationMatch = normalized.match(
+    /\b(?:in|across|throughout|serving)\s+([A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+){0,2})\b/
+  );
+
+  return locationMatch?.[1] || "";
+}
+
+function detectMagicProfile(brief) {
+  const lower = normalizeBrief(brief).toLowerCase();
+  let businessType = "b2b_service";
+  let offerType = "service";
+  let audienceType = "small_businesses";
+  let goalType = "lead_generation";
+  let toneType = "trusted";
+  let pricePosition = "standard";
+
+  if (/\b(saas|software|platform|app|workflow|automation)\b/.test(lower)) {
+    businessType = "saas";
+    offerType = "subscription";
+    audienceType = /\b(enterprise|large team|large teams)\b/.test(lower) ? "enterprise" : "small_businesses";
+    goalType = /\b(pricing|trial|signup|sign up|buy|purchase)\b/.test(lower) ? "sales" : "lead_generation";
+    toneType = "trusted";
+  } else if (/\b(shop|store|ecommerce|product|products|skincare|fashion|jewelry)\b/.test(lower)) {
+    businessType = "ecommerce";
+    offerType = "product";
+    audienceType = "consumers";
+    goalType = "sales";
+    toneType = "friendly";
+  } else if (/\b(salon|spa|wellness|beauty|clinic|facial|hair|skin)\b/.test(lower)) {
+    businessType = "wellness_beauty";
+    offerType = "service";
+    audienceType = "local_customers";
+    goalType = "bookings";
+    toneType = "premium";
+  } else if (/\b(coach|consult|advisor|creator|mentor|speaker|personal brand)\b/.test(lower)) {
+    businessType = "creator_personal_brand";
+    offerType = /\b(course|membership|cohort)\b/.test(lower) ? "course" : "consultation";
+    audienceType = /\b(teams|companies|businesses|founders)\b/.test(lower) ? "small_businesses" : "consumers";
+    goalType = "lead_generation";
+    toneType = "trusted";
+  } else if (
+    /\b(homeowners|local|renovat|plumb|roof|electric|cleaning|landscap|contractor|kitchen)\b/.test(lower)
+  ) {
+    businessType = "local_service";
+    offerType = "service";
+    audienceType = /\b(homeowners|families|residents)\b/.test(lower) ? "local_customers" : "consumers";
+    goalType = /\b(book|visit|appointment|consultation)\b/.test(lower) ? "bookings" : "lead_generation";
+    toneType = "trusted";
+  } else if (/\b(b2b|company|companies|businesses|teams|founders)\b/.test(lower)) {
+    businessType = "b2b_service";
+    offerType = /\b(platform|software|tool)\b/.test(lower) ? "subscription" : "service";
+    audienceType = /\b(enterprise|large team|large teams)\b/.test(lower) ? "enterprise" : "small_businesses";
+    goalType = "lead_generation";
+    toneType = "trusted";
+  }
+
+  if (/\b(premium|luxury|high-end|exclusive)\b/.test(lower)) {
+    pricePosition = "premium";
+    toneType = businessType === "local_service" ? "premium" : toneType;
+  } else if (/\b(affordable|budget|low-cost)\b/.test(lower)) {
+    pricePosition = "affordable";
+  }
+
+  if (/\b(awareness|visibility|reach)\b/.test(lower)) {
+    goalType = "awareness";
+  } else if (/\b(book|appointment|reserve|consultation)\b/.test(lower)) {
+    goalType = "bookings";
+  } else if (/\b(shop|buy|order|sales|sell|checkout)\b/.test(lower)) {
+    goalType = "sales";
+  }
+
+  if (/\b(enterprise|it teams|procurement)\b/.test(lower)) {
+    audienceType = "enterprise";
+  } else if (/\b(homeowners|families|residents|locals)\b/.test(lower)) {
+    audienceType = businessType === "local_service" ? "local_customers" : "consumers";
+  } else if (/\b(consumers|shoppers|customers)\b/.test(lower)) {
+    audienceType = "consumers";
+  }
+
+  return {
+    businessType,
+    offerType,
+    audienceType,
+    goalType,
+    toneType,
+    pricePosition
+  };
+}
+
+function getMagicTopicProfile(brief) {
+  const normalized = normalizeBrief(brief);
+  return magicTopicPatterns.find(({ pattern }) => pattern.test(normalized)) || null;
+}
+
+function deriveMagicBusinessName(brief, businessType, topicProfile) {
+  if (topicProfile?.name) {
+    const suffixByType = {
+      local_service: "Studio",
+      b2b_service: "Partners",
+      creator_personal_brand: "Studio",
+      ecommerce: "Store",
+      saas: "Cloud",
+      wellness_beauty: "Studio"
+    };
+
+    return `${topicProfile.name} ${suffixByType[businessType] || "Studio"}`.trim();
+  }
+
+  const cleaned = normalizeBrief(brief)
+    .replace(/^we\s+(help|build|create|offer|provide|sell)\s+/i, "")
+    .replace(/^i\s+(help|build|create|offer|provide)\s+/i, "");
+
+  const seed = cleaned
+    .split(/[^A-Za-z0-9]+/)
+    .filter((part) => part && !magicStopWords.has(part.toLowerCase()))
+    .slice(0, 3)
+    .map((part) => toTitleCase(part))
+    .join(" ");
+
+  return seed || "New Business";
+}
+
+function buildMagicAudience(brief, audienceType, geoFocus) {
+  const lower = normalizeBrief(brief).toLowerCase();
+
+  if (/\bhomeowners\b/.test(lower)) {
+    return geoFocus ? `Homeowners in ${geoFocus}` : "Homeowners planning a project";
+  }
+  if (/\bfounders\b/.test(lower)) {
+    return "Founders and lean growth teams";
+  }
+  if (/\bmarketers\b|\bmarketing teams\b/.test(lower)) {
+    return "Marketing teams looking for faster execution";
+  }
+  if (/\bsmall businesses\b|\bsmall business\b/.test(lower)) {
+    return "Small businesses that need a clearer funnel";
+  }
+  if (/\benterprise\b|\benterprises\b/.test(lower)) {
+    return "Enterprise teams with longer buying cycles";
+  }
+  if (/\bconsumers\b|\bshoppers\b/.test(lower)) {
+    return geoFocus ? `Consumers in ${geoFocus}` : "Consumers ready to compare options";
+  }
+
+  const label = getCatalogLabel("audienceType", audienceType);
+  return geoFocus ? `${label} in ${geoFocus}` : label;
+}
+
+function buildMagicCategory(brief, businessType, topicProfile) {
+  if (topicProfile?.category) return topicProfile.category;
+
+  const label = getCatalogLabel("businessType", businessType);
+  const cleaned = normalizeBrief(brief)
+    .replace(/^we\s+(help|build|create|offer|provide|sell)\s+/i, "")
+    .replace(/^i\s+(help|build|create|offer|provide)\s+/i, "")
+    .slice(0, 48);
+
+  return cleaned ? `${label} for ${cleaned}` : label;
+}
+
+function buildMagicHeadlines({ businessType, topic, audience, geoFocus }) {
+  const place = geoFocus ? ` in ${geoFocus}` : "";
+
+  if (businessType === "saas") {
+    return [
+      `Run ${topic} from one calmer workspace`,
+      `A faster way for ${audience.toLowerCase()} to go live`,
+      `Show value early and keep growth moving${place}`
+    ];
+  }
+
+  if (businessType === "ecommerce") {
+    return [
+      `A clearer way to shop ${topic}`,
+      `Built for ${audience.toLowerCase()} who want confidence before they buy`,
+      `Turn product discovery into steady sales${place}`
+    ];
+  }
+
+  if (businessType === "wellness_beauty") {
+    return [
+      `${toTitleCase(topic)} with a calmer booking flow`,
+      `Make it easy for ${audience.toLowerCase()} to choose and book`,
+      `A warmer brand experience that converts${place}`
+    ];
+  }
+
+  if (businessType === "creator_personal_brand") {
+    return [
+      `Turn expertise into a clear offer`,
+      `Help ${audience.toLowerCase()} trust you faster`,
+      `A simple path from first visit to booked call${place}`
+    ];
+  }
+
+  return [
+    `${toTitleCase(topic)} for ${audience.toLowerCase()}`,
+    `A clearer way to grow with ${topic}${place}`,
+    `Build trust early and make the next step obvious`
+  ];
+}
+
+function buildMagicPageStructure(businessType) {
+  const structures = {
+    local_service: ["hero", "services", "process", "proof", "service-area", "cta"],
+    b2b_service: ["hero", "problem", "offer", "proof", "faq", "cta"],
+    creator_personal_brand: ["hero", "story", "offer", "proof", "insights", "cta"],
+    ecommerce: ["hero", "bestsellers", "benefits", "reviews", "faq", "cta"],
+    saas: ["hero", "problem", "solution", "how-it-works", "proof", "cta"],
+    wellness_beauty: ["hero", "services", "benefits", "proof", "faq", "cta"]
+  };
+
+  return (structures[businessType] || structures.b2b_service).map(
+    (section) => magicPageLabels[section] || toTitleCase(section)
+  );
+}
+
+function buildMagicCta(goalType, businessType) {
+  if (goalType === "bookings") return "Book a consultation";
+  if (goalType === "sales") return businessType === "ecommerce" ? "Shop the collection" : "Start free trial";
+  if (goalType === "awareness") return "See how it works";
+  if (businessType === "local_service") return "Request a quote";
+  if (businessType === "saas") return "Start free trial";
+  return "Book a demo";
+}
+
+function buildMagicKeywords(topic, audience, geoFocus) {
+  const geoSuffix = geoFocus ? ` ${geoFocus}` : "";
+  const audienceSlug = audience.toLowerCase().replace(/\bin\s+[a-z\s-]+$/i, "").trim();
+  const keywords = [
+    `${topic}${geoSuffix}`.trim(),
+    `${topic} for ${audienceSlug}`.trim(),
+    `${topic} services`.trim(),
+    `${topic} strategy`.trim()
+  ];
+
+  return [...new Set(keywords)].slice(0, 4);
+}
+
+function buildMagicSetup(brief, overrides = {}) {
+  const normalizedBrief = normalizeBrief(brief);
+  const detected = detectMagicProfile(normalizedBrief);
+  const topicProfile = getMagicTopicProfile(normalizedBrief);
+  const businessType = overrides.businessType || detected.businessType;
+  const offerType = overrides.offerType || detected.offerType;
+  const audienceType = overrides.audienceType || detected.audienceType;
+  const goalType = overrides.goalType || detected.goalType;
+  const toneType = overrides.toneType || detected.toneType;
+  const pricePosition = overrides.pricePosition || detected.pricePosition;
+  const geoFocus = overrides.geoFocus || extractGeoFocus(normalizedBrief);
+  const topic = topicProfile?.topic || getCatalogLabel("businessType", businessType).toLowerCase();
+  const targetAudience = buildMagicAudience(normalizedBrief, audienceType, geoFocus);
+  const businessCategory = buildMagicCategory(normalizedBrief, businessType, topicProfile);
+  const headlineIdeas = buildMagicHeadlines({
+    businessType,
+    topic,
+    audience: targetAudience,
+    geoFocus
+  });
+  const suggestedPageStructure = buildMagicPageStructure(businessType);
+  const ctaSuggestion = overrides.mainCta || buildMagicCta(goalType, businessType);
+  const starterSeoKeywords = buildMagicKeywords(topic, targetAudience, geoFocus);
+  const businessName = deriveMagicBusinessName(normalizedBrief, businessType, topicProfile);
+  const customPrompt = [
+    `Position this business as ${businessCategory.toLowerCase()}.`,
+    `Focus on ${targetAudience.toLowerCase()}.`,
+    `Use a ${getCatalogLabel("toneType", toneType).toLowerCase()} voice.`,
+    `Lead toward the CTA "${ctaSuggestion}".`,
+    `Weave in keywords like ${starterSeoKeywords.join(", ")}.`
+  ].join(" ");
+
+  return {
+    brief: normalizedBrief,
+    businessName,
+    businessType,
+    businessCategory,
+    offerType,
+    audienceType,
+    targetAudience,
+    goalType,
+    toneType,
+    pricePosition,
+    geoFocus,
+    headlineIdeas,
+    suggestedPageStructure,
+    ctaSuggestion,
+    starterSeoKeywords,
+    customPrompt
+  };
+}
+
+function buildMagicIntakePayload(setup) {
+  return {
+    businessType: setup.businessType,
+    offerType: setup.offerType,
+    audienceType: setup.audienceType,
+    goalType: setup.goalType,
+    toneType: setup.toneType,
+    geoFocus: setup.geoFocus,
+    pricePosition: setup.pricePosition,
+    mainCta: setup.ctaSuggestion,
+    notes: [
+      `Original brief: ${setup.brief}`,
+      "",
+      "Suggested headlines:",
+      ...setup.headlineIdeas.map((idea) => `- ${idea}`),
+      "",
+      `Suggested page structure: ${setup.suggestedPageStructure.join(", ")}`,
+      `Starter SEO keywords: ${setup.starterSeoKeywords.join(", ")}`
+    ].join("\n")
+  };
+}
+
 function getActiveClient() {
   return state.bootstrap?.clients?.find((client) => client.id === state.activeClientId) || null;
 }
@@ -138,6 +577,10 @@ function hasProfile(client) {
       profile.mainCta ||
       profile.rawNotes?.notes
   );
+}
+
+function hasSavedSetup(client) {
+  return Boolean(client.strategyRecommendation);
 }
 
 function hasContent(client) {
@@ -197,22 +640,24 @@ function highlightGuideTarget(selector) {
 }
 
 function getNextStep(client) {
-  const runtime = getLumixRuntime(client);
-  if (runtime.nextStep) {
-    return runtime.nextStep;
-  }
-
   if (!hasProfile(client)) {
     return {
       title: "Tee tämä seuraavaksi",
-      text: "Täytä intake ja tallenna yrityksen tiedot."
+      text: "Lisää asiakas yhdellä briefillä."
+    };
+  }
+
+  if (!hasSavedSetup(client)) {
+    return {
+      title: "Tee tämä seuraavaksi",
+      text: "Tarkista setup ennen generointia."
     };
   }
 
   if (!hasContent(client)) {
     return {
       title: "Tee tämä seuraavaksi",
-      text: "Paina Generoi kaikki. Lumix tekee strategian ja sisällön samalla."
+      text: "Paina Generate all. Lumix tekee koko paketin."
     };
   }
 
@@ -220,15 +665,374 @@ function getNextStep(client) {
     return {
       title: "Tee tämä seuraavaksi",
       text: client.publishTargets.length
-        ? "Esikatsele sisältö ja julkaise valmis paketti."
-        : "Lisää ensin yksi julkaisukanava ja julkaise sitten valmis paketti."
+        ? "Tarkista lopputulos ja julkaise."
+        : "Tarkista lopputulos ja lisää yksi publish-kanava."
     };
   }
 
   return {
-    title: "Tämän jälkeen",
-    text: "Seuraa liidejä ja päivitä sisältöä tarpeen mukaan."
+    title: "Flow valmis",
+    text: "Publish on tehty. Seuraa nyt tuloksia ja päivitä sisältöä tarpeen mukaan."
   };
+}
+
+function countCompletedSteps(client) {
+  return getPrimaryFlowSteps(client).filter((step) => step.status === "completed").length;
+}
+
+function isCurrentStep(client, key) {
+  return getCurrentFlowStep(client)?.key === key;
+}
+
+function getPublishReadiness(client) {
+  if (!hasContent(client)) {
+    return {
+      ready: false,
+      tone: "blocked",
+      title: "Publish is blocked",
+      text: "Generate the landing page, blog drafts and SEO package first.",
+      target: "[data-guide='generate']"
+    };
+  }
+
+  if (!client.publishTargets.length) {
+    return {
+      ready: false,
+      tone: "blocked",
+      title: "Publish is almost ready",
+      text: "Add one publish channel in Publish settings to unlock go live.",
+      target: "[data-guide='publish-settings']"
+    };
+  }
+
+  if (client.publishHistory.length) {
+    return {
+      ready: true,
+      tone: "live",
+      title: "Published",
+      text: `Last publish ${formatDate(client.publishHistory[0].createdAt)}.`,
+      target: "[data-guide='publish']"
+    };
+  }
+
+  return {
+    ready: true,
+    tone: "ready",
+    title: "Ready to publish",
+    text: `${client.publishTargets.length} publish ${client.publishTargets.length === 1 ? "channel is" : "channels are"} connected.`,
+    target: "[data-guide='publish']"
+  };
+}
+
+function getWorkflowGuide(client) {
+  const currentStep = getCurrentFlowStep(client);
+  const completedSteps = countCompletedSteps(client);
+  const publishReadiness = getPublishReadiness(client);
+
+  if (!hasProfile(client)) {
+    return {
+      stateLabel: "Brief added",
+      stateTone: "draft",
+      heading: "Review setup",
+      description: "Turn the brief into a usable setup so Lumix can build the strategy next.",
+      helper: `Step ${currentStep.number} of 5. ${completedSteps}/5 completed.`,
+      primaryAction: {
+        kind: "focus",
+        label: "Open setup",
+        target: "[data-guide='intake']"
+      },
+      publishReadiness
+    };
+  }
+
+  if (!hasSavedSetup(client)) {
+    return {
+      stateLabel: "Setup drafted",
+      stateTone: "progress",
+      heading: "Generate strategy",
+      description: "Your business details are in place. Generate the Lumix setup before assets.",
+      helper: `Step ${currentStep.number} of 5. ${completedSteps}/5 completed.`,
+      primaryAction: {
+        kind: "action",
+        label: "Generate setup",
+        action: "recommend"
+      },
+      publishReadiness
+    };
+  }
+
+  if (!hasContent(client)) {
+    return {
+      stateLabel: "Strategy ready",
+      stateTone: "ready",
+      heading: "Generate assets",
+      description: "Create the landing page, blog drafts and SEO package from the approved setup.",
+      helper: `Step ${currentStep.number} of 5. ${completedSteps}/5 completed.`,
+      primaryAction: {
+        kind: "action",
+        label: "Generate assets",
+        action: "generate"
+      },
+      publishReadiness
+    };
+  }
+
+  if (!client.publishHistory.length) {
+    return {
+      stateLabel: publishReadiness.ready ? "Publish ready" : "Assets generated",
+      stateTone: publishReadiness.ready ? "ready" : "progress",
+      heading: "Review preview",
+      description: publishReadiness.ready
+        ? "Assets are generated and publish is ready. Review the preview, then go live."
+        : "Assets are generated. Review the preview and connect one publish channel next.",
+      helper: publishReadiness.text,
+      primaryAction: {
+        kind: "link",
+        label: "Review preview",
+        href: `/client/${client.id}`
+      },
+      publishReadiness
+    };
+  }
+
+  return {
+    stateLabel: "Published",
+    stateTone: "live",
+    heading: "Review results",
+    description: "The client is live. Track leads, review performance and refresh assets when needed.",
+    helper: publishReadiness.text,
+    primaryAction: {
+      kind: "focus",
+      label: "Open publish",
+      target: "[data-guide='publish']"
+    },
+    publishReadiness
+  };
+}
+
+function renderWorkflowFocusAction(client, guide) {
+  const action = guide.primaryAction;
+
+  if (!action) return "";
+
+  if (action.kind === "action") {
+    return `<button type="button" class="workflow-focus-button" data-action="${escapeHtml(action.action)}">${escapeHtml(action.label)}</button>`;
+  }
+
+  if (action.kind === "link") {
+    return `<a class="cta-link workflow-focus-button" href="${escapeHtml(action.href)}" target="_blank" rel="noopener">${escapeHtml(action.label)}</a>`;
+  }
+
+  return `<button type="button" class="ghost-button workflow-focus-button" data-flow-target="${escapeHtml(action.target)}">${escapeHtml(action.label)}</button>`;
+}
+
+function renderWorkflowFocus(client) {
+  const currentStep = getCurrentFlowStep(client);
+  const guide = getWorkflowGuide(client);
+
+  return `
+    <div class="workflow-focus-card">
+      <div class="workflow-focus-copy">
+        <div class="workflow-focus-meta">
+          <span class="section-kicker">Next action</span>
+          <span class="workflow-focus-step">Step ${escapeHtml(String(currentStep.number))} / 5</span>
+          <span class="workflow-state-pill workflow-state-pill-${escapeHtml(guide.stateTone)}">${escapeHtml(guide.stateLabel)}</span>
+        </div>
+        <h3>${escapeHtml(guide.heading)}</h3>
+        <p class="body-copy">${escapeHtml(guide.description)}</p>
+        <p class="workflow-focus-helper">${escapeHtml(guide.helper)}</p>
+      </div>
+
+      <div class="workflow-focus-side">
+        <div class="workflow-focus-grid">
+          <article class="workflow-status-card">
+            <span>Active client</span>
+            <strong>${escapeHtml(client.businessName)}</strong>
+          </article>
+          <article class="workflow-status-card">
+            <span>Current status</span>
+            <strong>${escapeHtml(guide.stateLabel)}</strong>
+          </article>
+          <article class="workflow-status-card">
+            <span>Publish</span>
+            <strong>${escapeHtml(guide.publishReadiness.title)}</strong>
+            <p>${escapeHtml(guide.publishReadiness.text)}</p>
+          </article>
+        </div>
+        ${renderWorkflowFocusAction(client, guide)}
+      </div>
+    </div>
+  `;
+}
+
+function getPrimaryFlowSteps(client) {
+  if (!client) {
+    return [
+      {
+        key: "brief",
+        number: 1,
+        title: "Lisää asiakas",
+        status: "current",
+        text: "Kirjoita yksi lyhyt business-kuvaus.",
+        target: "[data-guide='new-client']"
+      },
+      {
+        key: "setup",
+        number: 2,
+        title: "Setup",
+        status: "upcoming",
+        text: "Lumix ehdottaa rakennetta ja CTA:ta.",
+        target: "[data-guide='intake']"
+      },
+      {
+        key: "generate",
+        number: 3,
+        title: "Generate all",
+        status: "upcoming",
+        text: "Luo sivu, blogit ja SEO yhdellä klikillä.",
+        target: "[data-guide='generate']"
+      },
+      {
+        key: "preview",
+        number: 4,
+        title: "Näe lopputulos",
+        status: "upcoming",
+        text: "Tarkista valmis paketti ennen julkaisua.",
+        target: "[data-guide='preview']"
+      },
+      {
+        key: "publish",
+        number: 5,
+        title: "Publish",
+        status: "upcoming",
+        text: "Julkaise valmis sisältö ulos.",
+        target: "[data-guide='publish']"
+      }
+    ];
+  }
+
+  const setupReady = hasSavedSetup(client);
+  const contentReady = hasContent(client);
+  const published = Boolean(client.publishHistory.length);
+  const publishTarget = client.publishTargets.length ? "[data-guide='publish']" : "[data-guide='publish-settings']";
+
+  const currentKey = !setupReady
+    ? "setup"
+    : !contentReady
+      ? "generate"
+      : !published
+        ? "preview"
+        : "publish";
+
+  const steps = [
+    {
+      key: "brief",
+      number: 1,
+      title: "Asiakas",
+      text: `${client.businessName} on aktiivinen työtila.`,
+      target: "[data-guide='clients']"
+    },
+    {
+      key: "setup",
+      number: 2,
+      title: "Setup",
+      text: setupReady
+        ? "Setup tallennettu."
+        : "Tarkista ja tallenna setup.",
+      target: "[data-guide='intake']"
+    },
+    {
+      key: "generate",
+      number: 3,
+      title: "Generate all",
+      text: contentReady
+        ? `Paketti valmis${client.lastGenerationAt ? ` ${formatDate(client.lastGenerationAt)}` : ""}.`
+        : "Luo koko paketti yhdellä klikillä.",
+      target: "[data-guide='generate']"
+    },
+    {
+      key: "preview",
+      number: 4,
+      title: "Preview",
+      text: contentReady
+        ? published
+          ? "Valmis paketti on jo julkaistu."
+          : "Tarkista valmis paketti ennen julkaisua."
+        : "Lopputulos näkyy tässä vasta generoinnin jälkeen.",
+      target: "[data-guide='preview']"
+    },
+    {
+      key: "publish",
+      number: 5,
+      title: "Publish",
+      text: published
+        ? `Julkaistu${client.publishHistory[0]?.createdAt ? ` ${formatDate(client.publishHistory[0].createdAt)}` : ""}.`
+        : client.publishTargets.length
+          ? "Julkaise valmis sisältö tästä vaiheesta."
+          : "Lisää ensin yksi publish-kanava.",
+      target: publishTarget
+    }
+  ];
+
+  return steps.map((step) => ({
+    ...step,
+    status:
+      step.key === "brief"
+        ? "completed"
+        : step.key === "setup" && setupReady
+          ? "completed"
+          : step.key === "generate" && contentReady
+            ? "completed"
+            : step.key === "preview" && published
+              ? "completed"
+              : step.key === "publish" && published
+                ? "completed"
+                : step.key === currentKey
+                  ? "current"
+                  : "upcoming"
+  }));
+}
+
+function getCurrentFlowStep(client) {
+  const steps = getPrimaryFlowSteps(client);
+  return steps.find((step) => step.status === "current") || steps[0];
+}
+
+function renderFlowRail(client) {
+  const steps = getPrimaryFlowSteps(client);
+  const firstUpcomingIndex = steps.findIndex((step) => step.status === "upcoming");
+
+  return `
+    ${steps
+      .map(
+        (step, index) => `
+          <button
+            type="button"
+            class="rail-flow-item rail-flow-item-${step.status}"
+            data-flow-target="${escapeHtml(step.target)}"
+          >
+            <span class="rail-flow-line rail-flow-line-${index === steps.length - 1 ? "end" : "run"}" aria-hidden="true"></span>
+            <span class="rail-flow-marker">${step.status === "completed" ? "✓" : step.number}</span>
+            <span class="rail-flow-content">
+              <span class="rail-flow-title-row">
+                <strong>${escapeHtml(step.title)}</strong>
+                <span class="rail-flow-state rail-flow-state-${step.status}">${escapeHtml(
+                  step.status === "completed"
+                    ? "Done"
+                    : step.status === "current"
+                      ? "Now"
+                      : index === firstUpcomingIndex
+                        ? "Next"
+                        : "Later"
+                )}</span>
+              </span>
+              <span class="rail-flow-copy">${escapeHtml(step.text)}</span>
+            </span>
+          </button>
+        `
+      )
+      .join("")}
+  `;
 }
 
 function getTourSteps(client) {
@@ -239,8 +1043,8 @@ function getTourSteps(client) {
       target: "[data-guide='clients']"
     },
     {
-      title: "Uusi asiakas",
-      text: "Tämä on aloituskohta. Lisää nimi ja kuvaus. Muut asetukset voi avata myöhemmin.",
+      title: "Tell us about your business",
+      text: "Tämä on aloituskohta. Kirjoita yksi business-kuvaus ja Lumix muodostaa setupin.",
       target: "[data-guide='new-client']"
     }
   ];
@@ -248,23 +1052,23 @@ function getTourSteps(client) {
   if (client) {
     steps.push(
       {
-        title: "Yrityksen tiedot",
-        text: "Tähän tallennat mitä myydään, kenelle ja mikä on tärkein tavoite.",
+        title: "Suggested setup",
+        text: "Tässä näet categoryn, audience:n, headline-ideat, rakenteen ja CTA:n yhdestä syötteestä.",
         target: "[data-guide='intake']"
       },
       {
-        title: "Generoi kaikki",
-        text: "Tämä on päätoiminto. Lumix tekee strategian, sivun, blogit ja SEO:n samalla.",
+        title: "Generate all",
+        text: "Tämä on päätoiminto. Lumix tekee sivun, blogit ja SEO:n samalla.",
         target: "[data-guide='generate']"
       },
       {
-        title: "Esikatsele sisältö",
-        text: "Täältä tarkistat sivun, blogit ja SEO:n ennen julkaisua.",
+        title: "Näe lopputulos",
+        text: "Täältä tarkistat valmiin sivun, blogit ja SEO:n ennen Publish-vaihetta.",
         target: "[data-guide='preview']"
       },
       {
-        title: "Julkaise",
-        text: "Kun sisältö on valmis, julkaisu tehdään tästä.",
+        title: "Publish",
+        text: "Kun lopputulos näyttää oikealta, julkaisu tehdään tästä.",
         target: "[data-guide='publish']"
       }
     );
@@ -327,23 +1131,15 @@ function getCoachState(client) {
   if (!hasProfile(client)) {
     return {
       title: "Lumix",
-      text: "Täytä ensin yrityksen tiedot ja tallenna ne.",
+      text: "Täytä ensin tiedot ja tallenna ne.",
       target: "[data-guide='intake']"
-    };
-  }
-
-  if (!client.strategyRecommendation) {
-    return {
-      title: "Lumix",
-      text: "Seuraava klikki on ehdotukseen. Sillä saat hyvän suunnan ennen generointia.",
-      target: "[data-guide='recommend']"
     };
   }
 
   if (!hasContent(client)) {
     return {
       title: "Lumix",
-      text: "Nyt voit generoida sivun, blogit ja SEO:n yhdellä napilla.",
+      text: "Seuraava klikki on Generate all. Sillä syntyy koko paketti yhdellä kertaa.",
       target: "[data-guide='generate']"
     };
   }
@@ -351,7 +1147,7 @@ function getCoachState(client) {
   if (!client.publishTargets.length) {
     return {
       title: "Lumix",
-      text: "Lisää ensin yksi julkaisukanava lisäasetuksista.",
+      text: "Näe lopputulos ja lisää sitten yksi publish-kanava lisäasetuksista.",
       target: "[data-guide='publish-settings']"
     };
   }
@@ -359,7 +1155,7 @@ function getCoachState(client) {
   if (!client.publishHistory.length) {
     return {
       title: "Lumix",
-      text: "Sisältö on valmis. Seuraava klikki on julkaisu.",
+      text: "Lopputulos on valmis. Seuraava klikki on Publish.",
       target: "[data-guide='publish']"
     };
   }
@@ -632,14 +1428,29 @@ function renderLumixPanel() {
   const catalog = getIntakeCatalog();
   const model = state.bootstrap?.lumix?.model;
   const codex = state.bootstrap?.lumix?.codex;
+  const activeClient = getActiveClient();
+  const guide = activeClient ? getWorkflowGuide(activeClient) : null;
   if (!agent) {
     lumixSummary.textContent = "Lumix-data latautuu...";
     lumixCodex.innerHTML = '<article class="mini-card"><p>Ei dataa vielä.</p></article>';
     return;
   }
 
-  lumixSummary.textContent = `${agent.name} auttaa pitämään flow’n selkeänä.`;
+  lumixSummary.textContent = guide
+    ? `${agent.name}: ${guide.heading}. ${guide.publishReadiness.title}.`
+    : `${agent.name} auttaa pitämään flow’n selkeänä.`;
   lumixCodex.innerHTML = `
+    ${
+      guide
+        ? `
+          <article class="mini-card">
+            <strong>Now</strong>
+            <p>${escapeHtml(guide.stateLabel)} • ${escapeHtml(guide.heading)}</p>
+            <p>${escapeHtml(guide.publishReadiness.text)}</p>
+          </article>
+        `
+        : ""
+    }
     <article class="mini-card">
       <strong>${escapeHtml(agent.name)}</strong>
       <p>${escapeHtml(agent.summary)}</p>
@@ -692,6 +1503,169 @@ function renderSeo(seo) {
   `;
 }
 
+function truncateText(value, maxLength = 140) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
+}
+
+function getStructureSections(client) {
+  return client.strategyRecommendation?.homepageStructure?.length
+    ? client.strategyRecommendation.homepageStructure
+    : ["Hero", "Offer", "Proof", "CTA"];
+}
+
+function renderStructurePreview(structure, compact = false) {
+  const sections = (structure || []).length ? structure : ["Hero", "Offer", "Proof", "CTA"];
+
+  return `
+    <div class="structure-preview${compact ? " structure-preview-compact" : ""}">
+      ${sections
+        .map(
+          (section, index) => `
+            <article class="structure-node structure-node-${(index % 4) + 1}">
+              <span>${index + 1}</span>
+              <strong>${escapeHtml(section)}</strong>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderWebsiteMockPreview(client, compact = false) {
+  const website = client.website || {};
+  const recommendation = client.strategyRecommendation || {};
+  const sections = getStructureSections(client);
+  const headline = website.headline || client.businessName;
+  const subheadline = website.subheadline || recommendation.positioning || client.description;
+  const cta = website.cta || recommendation.ctaStrategy || client.businessProfile?.mainCta || "Primary CTA";
+  const highlightBlocks = sections.slice(1, 4).length ? sections.slice(1, 4) : ["Services", "Proof", "CTA"];
+
+  return `
+    <article class="website-mock${compact ? " website-mock-compact" : ""}">
+      <div class="website-mock-chrome">
+        <div class="website-mock-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="website-mock-url">${escapeHtml(client.businessName.toLowerCase().replace(/\s+/g, "-"))}.lumix.site</div>
+      </div>
+      <div class="website-mock-canvas">
+        <section class="website-hero">
+          <span class="website-tag">Hero</span>
+          <h5>${escapeHtml(headline)}</h5>
+          <p>${escapeHtml(truncateText(subheadline, compact ? 86 : 140))}</p>
+          <div class="website-cta-row">
+            <span class="website-cta-pill">${escapeHtml(truncateText(cta, compact ? 28 : 46))}</span>
+            <span class="website-proof-pill">${client.seo ? "SEO connected" : "SEO ready"}</span>
+          </div>
+        </section>
+
+        <div class="website-layout-strip">
+          ${sections
+            .slice(0, compact ? 4 : 6)
+            .map((section) => `<span class="website-layout-pill">${escapeHtml(section)}</span>`)
+            .join("")}
+        </div>
+
+        <div class="website-card-grid">
+          ${highlightBlocks
+            .map(
+              (section, index) => `
+                <article class="website-block-card">
+                  <span>Section ${index + 1}</span>
+                  <strong>${escapeHtml(section)}</strong>
+                  <p>${escapeHtml(
+                    truncateText(
+                      recommendation.contentAngles?.[index] ||
+                        `${section} block tuned to the current setup and CTA path.`,
+                      compact ? 56 : 88
+                    )
+                  )}</p>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
+
+        <div class="website-footer-band">
+          <strong>${client.blogs?.length || 0} blog drafts</strong>
+          <span>${client.seo?.slug ? `/${escapeHtml(client.seo.slug)}` : "Search snippet ready"}</span>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderBlogAssetStack(blogs, compact = false) {
+  if (!blogs.length) {
+    return `
+      <div class="blog-stack blog-stack-empty${compact ? " blog-stack-compact" : ""}">
+        <article class="blog-stack-card blog-stack-placeholder">
+          <span class="blog-stack-index">01</span>
+          <strong>Blog draft</strong>
+          <p>Generated articles will appear here.</p>
+        </article>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="blog-stack${compact ? " blog-stack-compact" : ""}">
+      ${blogs
+        .slice(0, 3)
+        .map(
+          (blog, index) => `
+            <article class="blog-stack-card">
+              <span class="blog-stack-index">${String(index + 1).padStart(2, "0")}</span>
+              <strong>${escapeHtml(truncateText(blog.title, compact ? 56 : 88))}</strong>
+              <p class="blog-stack-keyword">${escapeHtml(blog.keyword)}</p>
+              <p>${escapeHtml(truncateText(blog.excerpt, compact ? 72 : 108))}</p>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderSeoAssetPreview(seo, compact = false) {
+  if (!seo) {
+    return `
+      <article class="seo-preview-card">
+        <span class="section-kicker">SEO package</span>
+        <p class="body-copy">Title, meta description and keyword set will appear here.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="seo-preview-card${compact ? " seo-preview-card-compact" : ""}">
+      <span class="section-kicker">SEO package</span>
+      <div class="seo-snippet-card">
+        <span class="seo-snippet-url">/${escapeHtml(seo.slug)}</span>
+        <strong>${escapeHtml(truncateText(seo.title, compact ? 62 : 78))}</strong>
+        <p>${escapeHtml(truncateText(seo.metaDescription, compact ? 98 : 144))}</p>
+      </div>
+      <div class="seo-chip-list">
+        ${(seo.keywords || [])
+          .slice(0, compact ? 3 : 5)
+          .map((keyword) => `<span class="magic-chip">${escapeHtml(keyword)}</span>`)
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function getStageSurfaceClass(client, key) {
+  const step = getPrimaryFlowSteps(client).find((item) => item.key === key);
+  return step ? `stage-card-${step.status}` : "";
+}
+
 function renderBlogs(blogs) {
   if (!blogs.length) return '<p class="body-copy">Ei blogiluonnoksia vielä.</p>';
   return blogs
@@ -728,109 +1702,182 @@ function renderIntake(client) {
   const profile = client.businessProfile || {};
   const notes = profile.rawNotes?.notes || "";
   const intakeCatalog = getIntakeCatalog();
+  const recommendation = client.strategyRecommendation;
+  const setupDetailsOpen = recommendation ? "" : " open";
+  const current = isCurrentStep(client, "setup");
 
   return `
-    <div class="intake-frame" data-guide="intake">
+    <div class="intake-frame stage-card ${getStageSurfaceClass(client, "setup")}" data-guide="intake">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 1</span>
-          <h4>Yrityksen tiedot</h4>
+          <span class="section-kicker">2 / 5</span>
+          <h4>Setup</h4>
         </div>
-        <p>Kirjoita perussuunta.</p>
+        <p>${recommendation ? "Ready" : "Review"}</p>
       </div>
 
-      <p class="body-copy stage-inline-note">
-        ${escapeHtml(client.businessName)}: ${escapeHtml(client.description)}
-      </p>
-
-      <form class="stack-form intake-form" data-intake-form>
-        <div class="inline-grid">
-          <label>
-            <span>Yritystyyppi</span>
-            <select name="businessType">
-              ${renderSelectOptions(
-                intakeCatalog.businessType,
-                profile.businessType || "",
-                "Valitse yritystyyppi"
-              )}
-            </select>
-          </label>
-          <label>
-            <span>Kohderyhmä</span>
-            <select name="audienceType">
-              ${renderSelectOptions(
-                intakeCatalog.audienceType,
-                profile.audienceType || "",
-                "Valitse kohderyhmä"
-              )}
-            </select>
-          </label>
+      <div class="magic-results-panel">
+        <div class="magic-results-head">
+          <div>
+            <span class="section-kicker">Business brief</span>
+            <p class="body-copy stage-inline-note">${escapeHtml(client.description)}</p>
+          </div>
+          <div class="magic-results-badges">
+            <span class="flow-pill">${escapeHtml(getCatalogLabel("goalType", profile.goalType || ""))}</span>
+            <span class="flow-pill">${escapeHtml(getCatalogLabel("toneType", profile.toneType || ""))}</span>
+          </div>
         </div>
 
-        <div class="inline-grid">
-          <label>
-            <span>Päätavoite</span>
-            <select name="goalType">
-              ${renderSelectOptions(intakeCatalog.goalType, profile.goalType || "", "Valitse tavoite")}
-            </select>
-          </label>
-          <label>
-            <span>Pää-CTA</span>
-            <input
-              name="mainCta"
-              placeholder="Pyydä tarjous / Varaa aika / Ota yhteyttä"
-              value="${escapeHtml(profile.mainCta || "")}"
-            />
-          </label>
+        ${
+          recommendation
+            ? `
+              <div class="magic-results-grid">
+                <article class="magic-result-card">
+                  <span>Positioning</span>
+                  <strong>${escapeHtml(recommendation.positioning || "Not set")}</strong>
+                </article>
+                <article class="magic-result-card">
+                  <span>Offer</span>
+                  <strong>${escapeHtml(recommendation.primaryOffer || "Not set")}</strong>
+                </article>
+                <article class="magic-result-card">
+                  <span>Audience</span>
+                  <strong>${escapeHtml(recommendation.primaryAudience || "Not set")}</strong>
+                </article>
+                <article class="magic-result-card">
+                  <span>CTA</span>
+                  <strong>${escapeHtml(recommendation.ctaStrategy || "Not set")}</strong>
+                </article>
+              </div>
+
+              <div class="strategy-visual-layout">
+                <article class="magic-preview-card strategy-structure-card">
+                  <span class="section-kicker">Homepage structure</span>
+                  ${renderStructurePreview(recommendation.homepageStructure)}
+                </article>
+
+                <article class="magic-preview-card strategy-angles-card">
+                  <span class="section-kicker">Content angles</span>
+                  <div class="angle-card-grid">
+                    ${(recommendation.contentAngles || [])
+                      .map(
+                        (angle, index) => `
+                          <article class="angle-card">
+                            <span>${index + 1}</span>
+                            <strong>${escapeHtml(angle)}</strong>
+                          </article>
+                        `
+                      )
+                      .join("")}
+                  </div>
+                </article>
+
+                <article class="magic-preview-card strategy-cta-card">
+                  <span class="section-kicker">CTA focus</span>
+                  <div class="cta-focus-pill">${escapeHtml(recommendation.ctaStrategy || "Not set")}</div>
+                  <p class="body-copy">${escapeHtml(recommendation.summary || "No summary")}</p>
+                  <p class="body-copy">Updated ${escapeHtml(formatDate(recommendation.updatedAt))}</p>
+                </article>
+              </div>
+            `
+            : `
+              <article class="magic-preview-card">
+                <span class="section-kicker">No saved setup yet</span>
+                <p class="body-copy">Generate setup from this brief.</p>
+              </article>
+            `
+        }
+
+        <div class="stage-actions">
+          <button type="button" class="${current ? "" : "ghost-button"}" data-action="recommend">
+            ${recommendation ? "Refresh setup" : "Generate setup"}
+          </button>
         </div>
+      </div>
 
-        <details class="stage-subdetails">
-          <summary>Lisää tietoja</summary>
-
+      <details class="stage-subdetails"${setupDetailsOpen}>
+        <summary>Edit setup</summary>
+        <form class="stack-form intake-form" data-intake-form>
           <div class="inline-grid">
             <label>
-              <span>Tarjooma</span>
-              <select name="offerType">
-                ${renderSelectOptions(intakeCatalog.offerType, profile.offerType || "", "Valitse tarjooma")}
+              <span>Business type</span>
+              <select name="businessType">
+                ${renderSelectOptions(
+                  intakeCatalog.businessType,
+                  profile.businessType || "",
+                  "Select business type"
+                )}
               </select>
             </label>
             <label>
-              <span>Sävy</span>
-              <select name="toneType">
-                ${renderSelectOptions(intakeCatalog.toneType, profile.toneType || "", "Valitse sävy")}
+              <span>Target audience</span>
+              <select name="audienceType">
+                ${renderSelectOptions(
+                  intakeCatalog.audienceType,
+                  profile.audienceType || "",
+                  "Select audience"
+                )}
               </select>
             </label>
           </div>
 
           <div class="inline-grid">
             <label>
-              <span>Hintataso</span>
-              <select name="pricePosition">
-                ${renderSelectOptions(
-                  intakeCatalog.pricePosition,
-                  profile.pricePosition || "",
-                  "Valitse hintataso"
-                )}
+              <span>Primary goal</span>
+              <select name="goalType">
+                ${renderSelectOptions(intakeCatalog.goalType, profile.goalType || "", "Select goal")}
               </select>
             </label>
             <label>
-              <span>Alue / markkina</span>
+              <span>Main CTA</span>
+              <input
+                name="mainCta"
+                placeholder="Request a quote / Book a demo / Start free trial"
+                value="${escapeHtml(profile.mainCta || "")}"
+              />
+            </label>
+          </div>
+
+          <div class="inline-grid">
+            <label>
+              <span>Offer type</span>
+              <select name="offerType">
+                ${renderSelectOptions(intakeCatalog.offerType, profile.offerType || "", "Select offer")}
+              </select>
+            </label>
+            <label>
+              <span>Tone</span>
+              <select name="toneType">
+                ${renderSelectOptions(intakeCatalog.toneType, profile.toneType || "", "Select tone")}
+              </select>
+            </label>
+          </div>
+
+          <div class="inline-grid">
+            <label>
+              <span>Price position</span>
+              <select name="pricePosition">
+                ${renderSelectOptions(intakeCatalog.pricePosition, profile.pricePosition || "", "Select price")}
+              </select>
+            </label>
+            <label>
+              <span>Geo focus</span>
               <input
                 name="geoFocus"
-                placeholder="Helsinki, Suomi, verkossa..."
+                placeholder="Finland, Helsinki, online..."
                 value="${escapeHtml(profile.geoFocus || "")}"
               />
             </label>
           </div>
 
           <label>
-            <span>Lisähuomiot</span>
-            <textarea name="notes" rows="4" placeholder="Kirjoita tähän vapaasti, jos asiakas ei tiedä vielä kaikkea tarkasti.">${escapeHtml(notes)}</textarea>
+            <span>Notes</span>
+            <textarea name="notes" rows="4" placeholder="Add any extra direction for Lumix.">${escapeHtml(notes)}</textarea>
           </label>
-        </details>
 
-        <button type="submit" class="ghost-button">Tallenna tiedot</button>
-      </form>
+          <button type="submit" class="ghost-button">Save setup</button>
+        </form>
+      </details>
     </div>
   `;
 }
@@ -1045,61 +2092,116 @@ function renderOntologySummary(client) {
 function renderGenerateStage(client) {
   const runtime = getLumixRuntime(client);
   const generateEligibility = runtime.actions.generate_pack;
+  const outputsReady = hasContent(client);
+  const current = isCurrentStep(client, "generate");
 
   if (!generateEligibility.ready && !hasContent(client)) {
     return `
-      <div class="stage-card stage-card-locked">
+      <div class="stage-card stage-card-locked ${getStageSurfaceClass(client, "generate")}" data-guide="generate">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 3</span>
-            <h4>Generoi kaikki</h4>
+            <span class="section-kicker">3 / 5</span>
+            <h4>Generate all</h4>
           </div>
-          <p>Odottaa intakea.</p>
+          <p>Waiting</p>
         </div>
-        <p class="body-copy">${escapeHtml(generateEligibility.reason || "Täytä intake ensin.")}</p>
+        <div class="generate-asset-grid">
+          <article class="generate-asset-card">
+            <div class="generate-asset-head">
+              <strong>Landing page</strong>
+              <span class="generate-asset-badge">Queued</span>
+            </div>
+            ${renderWebsiteMockPreview(client, true)}
+          </article>
+          <article class="generate-asset-card">
+            <div class="generate-asset-head">
+              <strong>Blog pack</strong>
+              <span class="generate-asset-badge">Queued</span>
+            </div>
+            ${renderBlogAssetStack([], true)}
+          </article>
+          <article class="generate-asset-card">
+            <div class="generate-asset-head">
+              <strong>SEO package</strong>
+              <span class="generate-asset-badge">Queued</span>
+            </div>
+            ${renderSeoAssetPreview(null, true)}
+          </article>
+        </div>
+        <p class="body-copy">${escapeHtml(generateEligibility.reason || "Täytä tiedot ensin.")}</p>
       </div>
     `;
   }
 
   return `
-    <div class="stage-card">
+    <div class="stage-card ${getStageSurfaceClass(client, "generate")}" data-guide="generate">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 3</span>
-          <h4>Generoi kaikki</h4>
+          <span class="section-kicker">3 / 5</span>
+          <h4>Generate all</h4>
         </div>
-        <p>Tämä on tuotteen päätoiminto.</p>
+        <p>Output inventory</p>
       </div>
 
-      <p class="body-copy stage-inline-note">
-        Lumix luo samalla strategian, landing-sivun, 3 blogia ja SEO-paketin.
-      </p>
-
       <div class="stage-actions">
-        <button type="button" data-action="generate" data-guide="generate">Generoi kaikki</button>
+        <button type="button" class="${current ? "" : "ghost-button"}" data-action="generate">${outputsReady ? "Generate again" : "Generate all"}</button>
+      </div>
+
+      <div class="generate-asset-grid">
+        <article class="generate-asset-card">
+          <div class="generate-asset-head">
+            <strong>Landing page</strong>
+            <span class="generate-asset-badge${outputsReady && client.website?.html ? " generate-asset-badge-ready" : ""}">
+              ${client.website?.html ? "Created" : "Ready"}
+            </span>
+          </div>
+          ${renderWebsiteMockPreview(client, true)}
+        </article>
+
+        <article class="generate-asset-card">
+          <div class="generate-asset-head">
+            <strong>Blog pack</strong>
+            <span class="generate-asset-badge${client.blogs.length ? " generate-asset-badge-ready" : ""}">
+              ${client.blogs.length ? `${client.blogs.length} drafts` : "3 drafts"}
+            </span>
+          </div>
+          ${renderBlogAssetStack(client.blogs, true)}
+        </article>
+
+        <article class="generate-asset-card">
+          <div class="generate-asset-head">
+            <strong>SEO package</strong>
+            <span class="generate-asset-badge${client.seo ? " generate-asset-badge-ready" : ""}">
+              ${client.seo ? "Created" : "Ready"}
+            </span>
+          </div>
+          ${renderSeoAssetPreview(client.seo, true)}
+        </article>
       </div>
 
       <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Sivu ${client.website?.html ? "valmis" : "kesken"}</span>
-        <span class="flow-pill">Blogit ${client.blogs.length}</span>
-        <span class="flow-pill">SEO ${client.seo ? "valmis" : "kesken"}</span>
+        <span class="flow-pill">Landing page ${client.website?.html ? "ready" : "pending"}</span>
+        <span class="flow-pill">Blog posts ${client.blogs.length}</span>
+        <span class="flow-pill">SEO ${client.seo ? "ready" : "pending"}</span>
       </div>
     </div>
   `;
 }
 
 function renderPreviewStage(client) {
+  const current = isCurrentStep(client, "preview");
+
   if (!hasContent(client)) {
     return `
-      <div class="stage-card stage-card-locked">
+      <div class="stage-card stage-card-locked ${getStageSurfaceClass(client, "preview")}">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 4</span>
-            <h4>Esikatsele sisältö</h4>
+            <span class="section-kicker">4 / 5</span>
+            <h4>Näe lopputulos</h4>
           </div>
-          <p>Odottaa generointia.</p>
+          <p>Waiting</p>
         </div>
-        <p class="body-copy">Kun painat Generoi kaikki, valmis sivu, blogit ja SEO näkyvät tässä.</p>
+        <p class="body-copy">The generated page, blogs and SEO will appear here.</p>
       </div>
     `;
   }
@@ -1108,59 +2210,72 @@ function renderPreviewStage(client) {
   const recommendation = client.strategyRecommendation;
 
   return `
-    <div class="stage-card" data-guide="preview">
+    <div class="stage-card ${getStageSurfaceClass(client, "preview")}" data-guide="preview">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 4</span>
-          <h4>Esikatsele sisältö</h4>
+          <span class="section-kicker">4 / 5</span>
+          <h4>Preview</h4>
         </div>
-        <p>Tarkista ennen julkaisua.</p>
+        <p>Review</p>
       </div>
 
       <div class="stage-actions">
-        <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa valmis sivu</a>
+        <a class="${current ? "cta-link" : "ghost-link"} compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Review preview</a>
       </div>
 
-      ${
-        recommendation
-          ? `
-            <details class="stage-subdetails">
-              <summary>Näytä Lumixin suunta</summary>
-              <div class="strategy-list">
-                <div class="seo-item">
-                  <span>Positioning</span>
-                  <strong>${escapeHtml(recommendation.positioning || "")}</strong>
-                </div>
-                <div class="seo-item">
-                  <span>Pääpalvelu</span>
-                  <strong>${escapeHtml(recommendation.primaryOffer || "")}</strong>
-                </div>
-                <div class="seo-item">
-                  <span>CTA</span>
-                  <strong>${escapeHtml(recommendation.ctaStrategy || "")}</strong>
-                </div>
-              </div>
-            </details>
-          `
-          : ""
-      }
+      <div class="preview-visual-layout">
+        <div class="preview-primary-panel">
+          ${renderWebsiteMockPreview(client)}
+        </div>
 
-      <details class="stage-subdetails" open>
-        <summary>Näytä landing-sivu</summary>
+        <div class="preview-side-grid">
+          <article class="preview-asset-card">
+            <div class="generate-asset-head">
+              <strong>Blog pack</strong>
+              <span class="generate-asset-badge generate-asset-badge-ready">${visibleBlogs.length} visible</span>
+            </div>
+            ${renderBlogAssetStack(visibleBlogs)}
+          </article>
+
+          <article class="preview-asset-card">
+            <div class="generate-asset-head">
+              <strong>SEO package</strong>
+              <span class="generate-asset-badge generate-asset-badge-ready">${client.seo?.slug ? "Live snippet" : "Ready"}</span>
+            </div>
+            ${renderSeoAssetPreview(client.seo)}
+          </article>
+
+          ${
+            recommendation
+              ? `
+                <article class="preview-asset-card preview-strategy-card">
+                  <span class="section-kicker">Strategy alignment</span>
+                  <strong>${escapeHtml(recommendation.primaryOffer || client.businessName)}</strong>
+                  <p>${escapeHtml(truncateText(recommendation.positioning || "", 118))}</p>
+                  ${renderStructurePreview(recommendation.homepageStructure, true)}
+                </article>
+              `
+              : ""
+          }
+        </div>
+      </div>
+
+      <details class="stage-subdetails">
+        <summary>Inspect generated page markup</summary>
         <div class="site-frame stage-preview-frame">
           <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
         </div>
       </details>
 
       <details class="stage-subdetails">
-        <summary>Näytä blogit</summary>
+        <summary>Inspect blog drafts</summary>
         <div class="blog-frame stage-preview-frame">
           <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
         </div>
       </details>
 
       <details class="stage-subdetails">
-        <summary>Näytä SEO</summary>
+        <summary>Inspect SEO fields</summary>
         <div class="seo-frame stage-preview-frame">
           ${renderSeo(client.seo)}
         </div>
@@ -1172,16 +2287,18 @@ function renderPreviewStage(client) {
 function renderPublishStage(client) {
   const runtime = getLumixRuntime(client);
   const publishEligibility = runtime.actions.publish_pack;
+  const publishReadiness = getPublishReadiness(client);
+  const current = isCurrentStep(client, "publish");
 
   if (!publishEligibility.ready && !hasContent(client)) {
     return `
-      <div class="stage-card stage-card-locked">
+      <div class="stage-card stage-card-locked ${getStageSurfaceClass(client, "publish")}" data-guide="publish">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 5</span>
-          <h4>Julkaise</h4>
+          <span class="section-kicker">5 / 5</span>
+          <h4>Publish</h4>
         </div>
-        <p>Odottaa esikatselua.</p>
+        <p>Waiting</p>
       </div>
       <p class="body-copy">${escapeHtml(publishEligibility.reason || "Generoi ensin sisältö.")}</p>
     </div>
@@ -1189,33 +2306,41 @@ function renderPublishStage(client) {
   }
 
   return `
-    <div class="stage-card">
+    <div class="stage-card ${getStageSurfaceClass(client, "publish")}" data-guide="publish">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 5</span>
-          <h4>Julkaise</h4>
+          <span class="section-kicker">5 / 5</span>
+          <h4>Publish</h4>
         </div>
-        <p>Vie valmis paketti ulos.</p>
+        <p>${publishReadiness.ready ? "Ready" : "Blocked"}</p>
       </div>
-      <p class="body-copy stage-inline-note">
-        ${
-          client.publishTargets.length
-            ? `Julkaisukanavia ${client.publishTargets.length}.`
-            : "Julkaisukanavaa ei ole vielä lisätty."
-        }
-        ${client.publishHistory.length ? ` Viimeisin julkaisu ${formatDate(client.publishHistory[0].createdAt)}.` : ""}
-      </p>
-      <p class="body-copy">${escapeHtml(publishEligibility.reason || "")}</p>
+
+      <div class="publish-readiness-card publish-readiness-card-${publishReadiness.tone}">
+        <div class="publish-readiness-head">
+          <strong>${escapeHtml(publishReadiness.title)}</strong>
+          <span class="publish-readiness-badge">${escapeHtml(publishReadiness.ready ? "Ready" : "Blocked")}</span>
+        </div>
+        <p class="body-copy">${escapeHtml(publishReadiness.text)}</p>
+        <div class="publish-check-list">
+          <span class="publish-check-item ${hasContent(client) ? "publish-check-item-done" : ""}">Content pack</span>
+          <span class="publish-check-item ${client.publishTargets.length ? "publish-check-item-done" : ""}">Publish channel</span>
+          <span class="publish-check-item ${client.publishHistory.length ? "publish-check-item-done" : ""}">Go live</span>
+        </div>
+      </div>
+
+      ${publishEligibility.reason && !publishReadiness.ready ? `<p class="body-copy">${escapeHtml(publishEligibility.reason)}</p>` : ""}
 
       ${
         publishEligibility.ready
           ? `
             <div class="stage-actions">
-              <button type="button" data-action="publish-all" data-guide="publish">Julkaise sisältö</button>
+              <button type="button" class="${current ? "" : "ghost-button"}" data-action="publish-all">Publish</button>
             </div>
           `
           : `
-            <p class="body-copy">Lisää ensin yksi julkaisukanava lisäasetuksista. Sen jälkeen julkaisu onnistuu tästä.</p>
+            <div class="stage-actions">
+              <button type="button" class="ghost-button" data-flow-target="${escapeHtml(publishReadiness.target)}">Resolve blocker</button>
+            </div>
           `
       }
 
@@ -1438,20 +2563,12 @@ function renderEmptyWorkspace() {
           <span class="section-kicker">Aloita tästä</span>
           <h2>Luo ensimmäinen asiakas</h2>
         </div>
-        <p>Tähän avautuu yksi selkeä flow: tiedot, suunta, sisältö, julkaisu ja liidit.</p>
-      </div>
-
-      <div class="flow-strip">
-        <span class="flow-pill">1. Lisää asiakas</span>
-        <span class="flow-pill">2. Täytä intake</span>
-        <span class="flow-pill">3. Generoi kaikki</span>
-        <span class="flow-pill">4. Esikatsele sisältö</span>
-        <span class="flow-pill">5. Julkaise</span>
+        <p>Kun asiakas on luotu, varsinainen workflow avautuu tähän.</p>
       </div>
 
       <div class="next-step-card">
         <span class="section-kicker">Lumix</span>
-        <strong>Lumix ei ole erillinen chat. Se ohjaa tätä flow’ta vaihe vaiheelta.</strong>
+        <strong>Lumix auttaa seuraavassa vaiheessa, mutta itse työ tehdään tässä workflow’ssa.</strong>
         <div class="stage-actions">
           <button type="button" class="ghost-button" data-empty-action="lumix">Käynnistä Lumix</button>
         </div>
@@ -1474,17 +2591,7 @@ function renderClientSelector(clients) {
   clientsList.innerHTML = clients
     .map(
       (client) => {
-        const nextAction = getLumixRuntime(client).nextStep?.actionId;
-        const statusLabel =
-          nextAction === "recommend_strategy"
-            ? "Generoi kaikki"
-            : nextAction === "generate_pack"
-              ? "Generoi kaikki"
-              : nextAction === "publish_pack"
-                ? "Julkaise"
-                : nextAction === "review_leads"
-                  ? "Valmis"
-                  : "Aloita tiedoista";
+        const statusLabel = getCurrentFlowStep(client)?.title || "Valmis";
 
         return `
         <button
@@ -1504,7 +2611,7 @@ function renderClientSelector(clients) {
 }
 
 function renderActiveClient(client) {
-  const nextStep = getNextStep(client);
+  const guide = getWorkflowGuide(client);
 
   activeClientView.innerHTML = `
     <article class="panel workflow-card" data-client-id="${client.id}">
@@ -1516,21 +2623,12 @@ function renderActiveClient(client) {
         </div>
         <div class="workflow-header-meta">
           <span class="client-status">${escapeHtml(client.billingStatus)}</span>
+          <span class="workflow-header-pill">${escapeHtml(guide.stateLabel)}</span>
+          <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(guide.publishReadiness.title)}</span>
         </div>
       </div>
 
-      <div class="primary-flow-strip">
-        <span class="flow-pill">1. Lisää asiakas</span>
-        <span class="flow-pill">2. Täytä intake</span>
-        <span class="flow-pill">3. Generoi kaikki</span>
-        <span class="flow-pill">4. Esikatsele sisältö</span>
-        <span class="flow-pill">5. Julkaise</span>
-      </div>
-
-      <div class="next-step-card">
-        <span class="section-kicker">${escapeHtml(nextStep.title)}</span>
-        <strong>${escapeHtml(nextStep.text)}</strong>
-      </div>
+      ${renderWorkflowFocus(client)}
 
       <div class="workflow-stage-stack">
         ${renderIntake(client)}
@@ -1563,9 +2661,18 @@ function render() {
   document.getElementById("report-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
   document.getElementById("send-report-button").classList.toggle("hidden", state.bootstrap.user.role === "member");
 
+  const activeClient = getActiveClient();
+  if (flowRailList) {
+    flowRailList.innerHTML = renderFlowRail(activeClient);
+  }
+  if (flowRailCaption) {
+    flowRailCaption.textContent = activeClient
+      ? `Now: ${getWorkflowGuide(activeClient).heading}`
+      : "Five steps from brief to publish.";
+  }
+
   renderClientSelector(clients);
 
-  const activeClient = getActiveClient();
   if (activeClient) {
     renderActiveClient(activeClient);
   } else {
@@ -1591,20 +2698,38 @@ function render() {
 }
 
 async function refresh() {
-  state.bootstrap = await api("/api/bootstrap");
+  if (!hasStoredAuth()) {
+    const bootstrap = await api("/api/bootstrap");
 
-  if (!state.bootstrap.authenticated) {
-    window.location.href = "/login";
+    if (!bootstrap.authenticated) {
+      clearAuthenticated();
+      redirectTo("/login");
+      return;
+    }
+
+    markAuthenticated();
+    state.bootstrap = bootstrap;
+    render();
     return;
   }
 
+  state.bootstrap = await api("/api/bootstrap");
+
+  if (!state.bootstrap.authenticated) {
+    clearAuthenticated();
+    redirectTo("/login");
+    return;
+  }
+
+  markAuthenticated();
   render();
 }
 
 document.getElementById("logout-button").addEventListener("click", async () => {
   await runAction("Kirjaudutaan ulos...", async () => {
     await api("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    clearAuthenticated();
+    redirectTo("/login");
   });
 });
 
@@ -1612,30 +2737,41 @@ document.getElementById("client-form").addEventListener("submit", async (event) 
   event.preventDefault();
   const form = event.currentTarget;
   const raw = readForm(form);
+  const magicSetup = buildMagicSetup(raw.businessBrief);
   const payload = {
-    businessName: raw.businessName,
-    description: raw.description,
-    customPrompt: raw.customPrompt,
-    plan: raw.plan,
-    generationIntervalDays: Number(raw.generationIntervalDays),
-    autoGenerate: Boolean(raw.autoGenerate),
-    scheduleEnabled: Boolean(raw.scheduleEnabled)
+    businessName: magicSetup.businessName,
+    description: magicSetup.brief,
+    customPrompt: magicSetup.customPrompt,
+    plan: "growth",
+    generationIntervalDays: 30,
+    autoGenerate: false,
+    scheduleEnabled: true
   };
 
-  await runAction(`Luodaan asiakasta ${payload.businessName}...`, async () => {
+  await runAction(`Building setup for ${payload.businessName}...`, async () => {
     const result = await api("/api/clients", {
       method: "POST",
       body: JSON.stringify(payload)
     });
+
+    if (result.client?.id) {
+      await api(`/api/clients/${result.client.id}/intake`, {
+        method: "PUT",
+        body: JSON.stringify(buildMagicIntakePayload(magicSetup))
+      });
+
+      const recommendationResult = await api(`/api/clients/${result.client.id}/recommendation`, {
+        method: "POST"
+      });
+
+      if (recommendationResult.lumixAction) {
+        lumixActionState.set(result.client.id, recommendationResult.lumixAction);
+      }
+    }
+
     form.reset();
     state.activeClientId = result.client?.id || state.activeClientId;
-    setStatus(
-      result.job
-        ? `Asiakas luotu. Generointi lisätty jonoon (#${result.job.id}).`
-        : result.generationDecision?.reason
-          ? `Asiakas luotu. ${result.generationDecision.reason}`
-          : "Asiakas luotu."
-    );
+    setStatus(`Setup generated for ${payload.businessName}.`);
     await refresh();
   });
 });
@@ -1712,6 +2848,12 @@ clientsList.addEventListener("click", (event) => {
   render();
 });
 
+flowRailList?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-flow-target]");
+  if (!button) return;
+  highlightGuideTarget(button.dataset.flowTarget);
+});
+
 activeClientView.addEventListener("submit", async (event) => {
   const intakeForm = event.target.closest("form[data-intake-form]");
   if (intakeForm) {
@@ -1721,11 +2863,27 @@ activeClientView.addEventListener("submit", async (event) => {
     const raw = readForm(intakeForm);
 
     await runAction("Tallennetaan yrityksen tietoja...", async () => {
-      await api(`/api/clients/${clientId}/intake`, {
+      const intakeResult = await api(`/api/clients/${clientId}/intake`, {
         method: "PUT",
         body: JSON.stringify(raw)
       });
-      setStatus("Yrityksen tiedot tallennettu.");
+
+      const recommendReady = Boolean(intakeResult.client?.lumix?.actions?.recommend_strategy?.ready);
+
+      if (recommendReady) {
+        const recommendationResult = await api(`/api/clients/${clientId}/recommendation`, {
+          method: "POST"
+        });
+
+        if (recommendationResult.lumixAction) {
+          lumixActionState.set(clientId, recommendationResult.lumixAction);
+        }
+
+        setStatus("Tiedot tallennettu ja setup päivitetty.");
+      } else {
+        setStatus("Yrityksen tiedot tallennettu.");
+      }
+
       await refresh();
     });
     return;
@@ -1761,6 +2919,12 @@ activeClientView.addEventListener("click", async (event) => {
     return;
   }
 
+  const flowButton = event.target.closest("button[data-flow-target]");
+  if (flowButton) {
+    highlightGuideTarget(flowButton.dataset.flowTarget);
+    return;
+  }
+
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
@@ -1789,7 +2953,7 @@ activeClientView.addEventListener("click", async (event) => {
       if (result.lumixAction) {
         lumixActionState.set(clientId, result.lumixAction);
       }
-      setStatus(`Lumixin ehdotus päivitetty asiakkaalle ${client.businessName}.`);
+      setStatus(`Saved setup updated for ${client.businessName}.`);
       await refresh();
     });
     return;

@@ -817,15 +817,15 @@ app.get("/client/:id", (_req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  res.redirect("/lumix");
-});
-
-app.get("/lumix", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+app.get("/lumix", (_req, res) => {
+  res.sendFile(path.join(publicDir, "lumix.html"));
+});
+
 app.get("/webbom", (_req, res) => {
-  res.redirect("/lumix");
+  res.redirect("/");
 });
 
 app.get("/login", (_req, res) => {
