@@ -3,6 +3,11 @@ import { clearAuthenticated, hasStoredAuth, markAuthenticated, redirectTo } from
 const state = {
   bootstrap: null,
   activeClientId: null,
+  sidebarQuery: "",
+  sidebarSection: "workspace",
+  openPopover: null,
+  previewTabs: {},
+  setupModes: {},
   tourActive: false,
   tourStepIndex: 0,
   tourInitialized: false,
@@ -22,13 +27,107 @@ const jobsList = document.getElementById("jobs-list");
 const lumixCodex = document.getElementById("lumix-codex");
 const lumixSummary = document.getElementById("lumix-summary");
 const activeClientView = document.getElementById("active-client-view");
+const clientAdvancedView = document.getElementById("client-advanced-view");
 const lumixCoach = document.getElementById("lumix-coach");
+const sidebarSearch = document.getElementById("sidebar-search");
+const sidebarBrandTitle = document.getElementById("sidebar-brand-title");
+const sidebarBrandSubtitle = document.getElementById("sidebar-brand-subtitle");
+const sidebarUserName = document.getElementById("sidebar-user-name");
+const sidebarUserRole = document.getElementById("sidebar-user-role");
+const sidebarUserAvatar = document.getElementById("sidebar-user-avatar");
+const iconRailAvatarLabel = document.getElementById("icon-rail-avatar-label");
+const workspacePopoverTitle = document.getElementById("workspace-popover-title");
+const workspacePopoverName = document.getElementById("workspace-popover-name");
+const workspacePopoverMeta = document.getElementById("workspace-popover-meta");
+const profilePopoverName = document.getElementById("profile-popover-name");
+const workspaceSwitcherButton = document.getElementById("workspace-switcher-button");
+const profileMenuButton = document.getElementById("profile-menu-button");
+const iconRailProfileButton = document.getElementById("icon-rail-profile-button");
+const workspaceSwitcherPopover = document.getElementById("workspace-switcher-popover");
+const profileSettingsPopover = document.getElementById("profile-settings-popover");
 const lumixButton = document.getElementById("lumix-button");
+const advancedToggle = document.getElementById("advanced-toggle");
+const newClientTrigger = document.getElementById("new-client-trigger");
+const newClientDrawer = document.getElementById("new-client-drawer");
+const advancedDrawer = document.getElementById("advanced-drawer");
+const clientForm = document.getElementById("client-form");
 const lumixActionState = new Map();
 const lumixAssistState = new Map();
 let guideHighlightTimeout = null;
 const lumixTourStorageKey = "lumix-tour-dismissed-v1";
 const lumixHiddenStorageKey = "lumix-hidden-v1";
+
+function getDrawer(name) {
+  if (name === "new-client") return newClientDrawer;
+  if (name === "advanced") return advancedDrawer;
+  return null;
+}
+
+function syncDrawerState() {
+  const drawerOpen = Boolean(document.querySelector(".dashboard-drawer.is-open"));
+  document.body.classList.toggle("dashboard-drawer-open", drawerOpen);
+}
+
+function openDrawer(name) {
+  const drawer = getDrawer(name);
+  if (!drawer) return;
+  closePopover();
+  state.sidebarSection = name;
+  syncSidebarActiveState();
+  if (name !== "new-client") closeDrawer("new-client");
+  if (name !== "advanced") closeDrawer("advanced");
+  drawer.classList.add("is-open");
+  drawer.setAttribute("aria-hidden", "false");
+  syncDrawerState();
+
+  if (name === "new-client") {
+    window.setTimeout(() => {
+      drawer.querySelector("textarea")?.focus();
+    }, 40);
+  }
+}
+
+function closeDrawer(name) {
+  const drawer = getDrawer(name);
+  if (!drawer) return;
+  drawer.classList.remove("is-open");
+  drawer.setAttribute("aria-hidden", "true");
+  syncDrawerState();
+}
+
+function closeAllDrawers() {
+  closeDrawer("new-client");
+  closeDrawer("advanced");
+}
+
+function getPopover(name) {
+  if (name === "workspace") return workspaceSwitcherPopover;
+  if (name === "profile") return profileSettingsPopover;
+  return null;
+}
+
+function closePopover() {
+  if (!state.openPopover) return;
+  const popover = getPopover(state.openPopover);
+  popover?.classList.remove("is-open");
+  popover?.setAttribute("aria-hidden", "true");
+  state.openPopover = null;
+}
+
+function togglePopover(name) {
+  const popover = getPopover(name);
+  if (!popover) return;
+
+  if (state.openPopover === name) {
+    closePopover();
+    return;
+  }
+
+  closePopover();
+  popover.classList.add("is-open");
+  popover.setAttribute("aria-hidden", "false");
+  state.openPopover = name;
+}
 
 function getIntakeCatalog() {
   return (
@@ -110,6 +209,74 @@ function buildPublishConfig(raw) {
 
 function formatClientCount(count) {
   return `${count} ${count === 1 ? "asiakas" : "asiakasta"}`;
+}
+
+function getInitials(...parts) {
+  return parts
+    .join(" ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((value) => value[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function getFilteredClients(clients) {
+  const query = state.sidebarQuery.trim().toLowerCase();
+  if (!query) return clients;
+
+  return clients.filter((client) => {
+    const haystack = [
+      client.businessName,
+      client.description,
+      client.billingStatus,
+      getCurrentFlowStep(client)?.title || "",
+      client.strategyRecommendation?.summary || ""
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+}
+
+function syncSidebarActiveState() {
+  document.querySelectorAll("[data-sidebar-target], [data-rail-target]").forEach((element) => {
+    const target = element.dataset.sidebarTarget || element.dataset.railTarget;
+    const active = target === state.sidebarSection;
+    if (element.classList.contains("sidebar-nav-item")) {
+      element.classList.toggle("sidebar-nav-item-active", active);
+    }
+    if (element.classList.contains("icon-rail-button")) {
+      element.classList.toggle("icon-rail-button-active", active);
+    }
+  });
+}
+
+function focusSidebarSection(section) {
+  if (!section) return;
+
+  if (section === "new-client") {
+    openDrawer("new-client");
+    return;
+  }
+
+  if (section === "advanced") {
+    openDrawer("advanced");
+    return;
+  }
+
+  state.sidebarSection = section;
+  syncSidebarActiveState();
+
+  const target =
+    section === "flow"
+      ? document.querySelector("[data-guide='core-flow']")
+      : section === "clients"
+        ? document.querySelector("[data-guide='clients']")
+        : document.querySelector(".workflow-shell");
+
+  target?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 const magicLocationSignals = [
@@ -701,7 +868,7 @@ function getPublishReadiness(client) {
       tone: "blocked",
       title: "Publish is almost ready",
       text: "Add one publish channel in Publish settings to unlock go live.",
-      target: "[data-guide='publish-settings']"
+      target: "[data-guide='advanced']"
     };
   }
 
@@ -722,6 +889,124 @@ function getPublishReadiness(client) {
     text: `${client.publishTargets.length} publish ${client.publishTargets.length === 1 ? "channel is" : "channels are"} connected.`,
     target: "[data-guide='publish']"
   };
+}
+
+function getStepStatus(client, key) {
+  return getPrimaryFlowSteps(client).find((step) => step.key === key)?.status || "upcoming";
+}
+
+function getSetupMode(client) {
+  if (state.setupModes[client.id]) return state.setupModes[client.id];
+  return client.strategyRecommendation ? "review" : "edit";
+}
+
+function getPreviewTab(client) {
+  return state.previewTabs[client.id] || "landing";
+}
+
+function renderStageAction(action, className = "") {
+  if (!action) return "";
+
+  const classes = className ? ` ${className}` : "";
+
+  if (action.kind === "action") {
+    return `<button type="button" class="${action.ghost ? "ghost-button" : ""}${classes}" data-action="${escapeHtml(action.action)}">${escapeHtml(action.label)}</button>`;
+  }
+
+  if (action.kind === "link") {
+    return `<a class="${action.ghost ? "ghost-link" : "cta-link"}${classes}" href="${escapeHtml(action.href)}" target="${action.targetBlank ? "_blank" : "_self"}"${action.targetBlank ? ' rel="noopener"' : ""}>${escapeHtml(action.label)}</a>`;
+  }
+
+  if (action.kind === "toggle-setup") {
+    return `<button type="button" class="${action.ghost ? "ghost-button" : ""}${classes}" data-setup-mode="${escapeHtml(action.mode)}">${escapeHtml(action.label)}</button>`;
+  }
+
+  if (action.kind === "drawer") {
+    return `<button type="button" class="${action.ghost ? "ghost-button" : ""}${classes}" data-open-drawer="${escapeHtml(action.drawer)}">${escapeHtml(action.label)}</button>`;
+  }
+
+  return `<button type="button" class="${action.ghost ? "ghost-button" : ""}${classes}" data-flow-target="${escapeHtml(action.target)}">${escapeHtml(action.label)}</button>`;
+}
+
+function renderStageGate({
+  number,
+  title,
+  description,
+  readyItems = [],
+  blocker,
+  primaryAction,
+  secondaryAction,
+  tone = "current"
+}) {
+  const summaryItems = [
+    ...readyItems.map((item) => ({ tone: "ready", label: item })),
+    blocker ? { tone: "blocked", label: blocker } : null
+  ].filter(Boolean);
+
+  return `
+    <div class="stage-gate stage-gate-${escapeHtml(tone)}">
+      <div class="stage-gate-head">
+        <div>
+          <span class="section-kicker">${escapeHtml(`${number} / 5`)}</span>
+          <h4>${escapeHtml(title)}</h4>
+        </div>
+        <span class="stage-gate-state stage-gate-state-${escapeHtml(tone)}">${escapeHtml(
+          tone === "completed" ? "Completed" : tone === "upcoming" ? "Upcoming" : "Current"
+        )}</span>
+      </div>
+
+      <p class="body-copy stage-gate-description">${escapeHtml(description)}</p>
+
+      ${
+        summaryItems.length
+          ? `
+            <div class="stage-gate-summary-strip">
+              ${summaryItems
+                .map(
+                  (item) => `<span class="stage-gate-summary-pill stage-gate-summary-pill-${escapeHtml(item.tone)}">${escapeHtml(item.label)}</span>`
+                )
+                .join("")}
+            </div>
+          `
+          : ""
+      }
+
+      <div class="stage-gate-actions">
+        ${renderStageAction(primaryAction)}
+        ${secondaryAction ? renderStageAction(secondaryAction) : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderStageSummary({
+  number,
+  title,
+  summary,
+  status,
+  primaryAction,
+  secondaryAction
+}) {
+  return `
+    <div class="workflow-stage workflow-stage-${escapeHtml(status)}">
+      <div class="workflow-stage-summary">
+        <div class="workflow-stage-summary-main">
+          <span class="section-kicker">${escapeHtml(`${number} / 5`)}</span>
+          <strong>${escapeHtml(title)}</strong>
+          <p>${escapeHtml(summary)}</p>
+        </div>
+        <div class="workflow-stage-summary-side">
+          <span class="workflow-stage-summary-state workflow-stage-summary-state-${escapeHtml(status)}">${escapeHtml(
+            status === "completed" ? "Completed" : "Upcoming"
+          )}</span>
+          <div class="workflow-stage-summary-actions">
+            ${primaryAction ? renderStageAction(primaryAction, "workflow-stage-summary-button") : ""}
+            ${secondaryAction ? renderStageAction(secondaryAction, "workflow-stage-summary-button") : ""}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function getWorkflowGuide(client) {
@@ -826,39 +1111,24 @@ function renderWorkflowFocusAction(client, guide) {
   return `<button type="button" class="ghost-button workflow-focus-button" data-flow-target="${escapeHtml(action.target)}">${escapeHtml(action.label)}</button>`;
 }
 
-function renderWorkflowFocus(client) {
+function renderStickyStageHeader(client) {
   const currentStep = getCurrentFlowStep(client);
   const guide = getWorkflowGuide(client);
+  const nextStep = getNextStep(client);
 
   return `
-    <div class="workflow-focus-card">
-      <div class="workflow-focus-copy">
-        <div class="workflow-focus-meta">
-          <span class="section-kicker">Next action</span>
-          <span class="workflow-focus-step">Step ${escapeHtml(String(currentStep.number))} / 5</span>
-          <span class="workflow-state-pill workflow-state-pill-${escapeHtml(guide.stateTone)}">${escapeHtml(guide.stateLabel)}</span>
-        </div>
-        <h3>${escapeHtml(guide.heading)}</h3>
-        <p class="body-copy">${escapeHtml(guide.description)}</p>
-        <p class="workflow-focus-helper">${escapeHtml(guide.helper)}</p>
+    <div class="workflow-stage-header">
+      <div class="workflow-status-card">
+        <span>Main status</span>
+        <strong>${escapeHtml(guide.heading)}</strong>
+        <p>${escapeHtml(guide.description)}</p>
       </div>
-
-      <div class="workflow-focus-side">
-        <div class="workflow-focus-grid">
-          <article class="workflow-status-card">
-            <span>Active client</span>
-            <strong>${escapeHtml(client.businessName)}</strong>
-          </article>
-          <article class="workflow-status-card">
-            <span>Current status</span>
-            <strong>${escapeHtml(guide.stateLabel)}</strong>
-          </article>
-          <article class="workflow-status-card">
-            <span>Publish</span>
-            <strong>${escapeHtml(guide.publishReadiness.title)}</strong>
-            <p>${escapeHtml(guide.publishReadiness.text)}</p>
-          </article>
-        </div>
+      <div class="workflow-stage-header-summary">
+        <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(`Stage ${currentStep.number}/5: ${currentStep.title}`)}</span>
+        <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(nextStep.text)}</span>
+        <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(guide.publishReadiness.title)}</span>
+      </div>
+      <div class="workflow-stage-header-actions">
         ${renderWorkflowFocusAction(client, guide)}
       </div>
     </div>
@@ -914,13 +1184,13 @@ function getPrimaryFlowSteps(client) {
   const setupReady = hasSavedSetup(client);
   const contentReady = hasContent(client);
   const published = Boolean(client.publishHistory.length);
-  const publishTarget = client.publishTargets.length ? "[data-guide='publish']" : "[data-guide='publish-settings']";
+  const publishTarget = client.publishTargets.length ? "[data-guide='publish']" : "[data-guide='advanced']";
 
   const currentKey = !setupReady
     ? "setup"
     : !contentReady
       ? "generate"
-      : !published
+      : !published && !client.publishTargets.length
         ? "preview"
         : "publish";
 
@@ -957,7 +1227,9 @@ function getPrimaryFlowSteps(client) {
       text: contentReady
         ? published
           ? "Valmis paketti on jo julkaistu."
-          : "Tarkista valmis paketti ennen julkaisua."
+          : client.publishTargets.length
+            ? "Preview tarkistettu. Siirry publishiin."
+            : "Tarkista valmis paketti ennen julkaisua."
         : "Lopputulos näkyy tässä vasta generoinnin jälkeen.",
       target: "[data-guide='preview']"
     },
@@ -983,7 +1255,7 @@ function getPrimaryFlowSteps(client) {
           ? "completed"
           : step.key === "generate" && contentReady
             ? "completed"
-            : step.key === "preview" && published
+            : step.key === "preview" && (published || (contentReady && client.publishTargets.length))
               ? "completed"
               : step.key === "publish" && published
                 ? "completed"
@@ -1081,9 +1353,9 @@ function getTourSteps(client) {
   }
 
   steps.push({
-    title: "Muut asetukset",
-    text: "Harvemmin tarvittavat asetukset ja tekninen puoli ovat täällä erillään pääflow’sta.",
-    target: "[data-guide='more-settings']"
+    title: "Advanced",
+    text: "Harvemmin tarvittavat asetukset, publish settings ja inspect-näkymät ovat täällä erillään pääflow’sta.",
+    target: "[data-guide='advanced']"
   });
 
   return steps.filter((step) => document.querySelector(step.target));
@@ -1124,7 +1396,7 @@ function getCoachState(client) {
     return {
       title: "Lumix",
       text: "Lumix toimii tässä dashboardissa. Luo ensin yksi asiakas, niin ohjaan seuraavaan kohtaan.",
-      target: "#client-form"
+      target: "[data-guide='new-client']"
     };
   }
 
@@ -1148,7 +1420,7 @@ function getCoachState(client) {
     return {
       title: "Lumix",
       text: "Näe lopputulos ja lisää sitten yksi publish-kanava lisäasetuksista.",
-      target: "[data-guide='publish-settings']"
+      target: "[data-guide='advanced']"
     };
   }
 
@@ -1698,187 +1970,220 @@ function renderSelectOptions(options, selectedValue, placeholder) {
     .join("");
 }
 
+function renderClientStage(client) {
+  return renderStageSummary({
+    number: 1,
+    title: "Client",
+    summary: `${client.businessName} on aktiivinen työtila.`,
+    status: "completed",
+    primaryAction: {
+      kind: "focus",
+      label: "Switch client",
+      target: "[data-guide='clients']"
+    },
+    secondaryAction: {
+      kind: "drawer",
+      label: "Add new",
+      drawer: "new-client",
+      ghost: true
+    }
+  });
+}
+
 function renderIntake(client) {
   const profile = client.businessProfile || {};
   const notes = profile.rawNotes?.notes || "";
   const intakeCatalog = getIntakeCatalog();
   const recommendation = client.strategyRecommendation;
-  const setupDetailsOpen = recommendation ? "" : " open";
-  const current = isCurrentStep(client, "setup");
+  const status = getStepStatus(client, "setup");
+  const mode = getSetupMode(client);
+  const readyItems = [
+    profile.goalType ? `Goal: ${getCatalogLabel("goalType", profile.goalType)}` : "",
+    profile.toneType ? `Tone: ${getCatalogLabel("toneType", profile.toneType)}` : "",
+    recommendation ? "Strategy ready" : ""
+  ].filter(Boolean);
+
+  const reviewBody = recommendation
+    ? `
+        <div class="magic-results-panel">
+          <div class="magic-results-head">
+            <div>
+              <span class="section-kicker">Business brief</span>
+              <p class="body-copy stage-inline-note">${escapeHtml(client.description)}</p>
+            </div>
+            <div class="magic-results-badges">
+              <span class="flow-pill">${escapeHtml(getCatalogLabel("goalType", profile.goalType || ""))}</span>
+              <span class="flow-pill">${escapeHtml(getCatalogLabel("toneType", profile.toneType || ""))}</span>
+            </div>
+          </div>
+
+          <div class="magic-results-grid">
+            <article class="magic-result-card">
+              <span>Positioning</span>
+              <strong>${escapeHtml(recommendation.positioning || "Not set")}</strong>
+            </article>
+            <article class="magic-result-card">
+              <span>Offer</span>
+              <strong>${escapeHtml(recommendation.primaryOffer || "Not set")}</strong>
+            </article>
+            <article class="magic-result-card">
+              <span>Audience</span>
+              <strong>${escapeHtml(recommendation.primaryAudience || "Not set")}</strong>
+            </article>
+            <article class="magic-result-card">
+              <span>CTA</span>
+              <strong>${escapeHtml(recommendation.ctaStrategy || "Not set")}</strong>
+            </article>
+          </div>
+        </div>
+      `
+    : `
+        <article class="magic-preview-card">
+          <span class="section-kicker">No saved setup yet</span>
+          <p class="body-copy">Generate setup from this brief.</p>
+        </article>
+      `;
+
+  const editBody = `
+    <form class="stack-form intake-form" data-intake-form>
+      <div class="inline-grid">
+        <label>
+          <span>Business type</span>
+          <select name="businessType">
+            ${renderSelectOptions(intakeCatalog.businessType, profile.businessType || "", "Select business type")}
+          </select>
+        </label>
+        <label>
+          <span>Target audience</span>
+          <select name="audienceType">
+            ${renderSelectOptions(intakeCatalog.audienceType, profile.audienceType || "", "Select audience")}
+          </select>
+        </label>
+      </div>
+
+      <div class="inline-grid">
+        <label>
+          <span>Primary goal</span>
+          <select name="goalType">
+            ${renderSelectOptions(intakeCatalog.goalType, profile.goalType || "", "Select goal")}
+          </select>
+        </label>
+        <label>
+          <span>Main CTA</span>
+          <input
+            name="mainCta"
+            placeholder="Request a quote / Book a demo / Start free trial"
+            value="${escapeHtml(profile.mainCta || "")}"
+          />
+        </label>
+      </div>
+
+      <div class="inline-grid">
+        <label>
+          <span>Offer type</span>
+          <select name="offerType">
+            ${renderSelectOptions(intakeCatalog.offerType, profile.offerType || "", "Select offer")}
+          </select>
+        </label>
+        <label>
+          <span>Tone</span>
+          <select name="toneType">
+            ${renderSelectOptions(intakeCatalog.toneType, profile.toneType || "", "Select tone")}
+          </select>
+        </label>
+      </div>
+
+      <div class="inline-grid">
+        <label>
+          <span>Price position</span>
+          <select name="pricePosition">
+            ${renderSelectOptions(intakeCatalog.pricePosition, profile.pricePosition || "", "Select price")}
+          </select>
+        </label>
+        <label>
+          <span>Geo focus</span>
+          <input
+            name="geoFocus"
+            placeholder="Finland, Helsinki, online..."
+            value="${escapeHtml(profile.geoFocus || "")}"
+          />
+        </label>
+      </div>
+
+      <label>
+        <span>Notes</span>
+        <textarea name="notes" rows="4" placeholder="Add any extra direction for Lumix.">${escapeHtml(notes)}</textarea>
+      </label>
+
+      <button type="submit" class="ghost-button">Save setup</button>
+    </form>
+  `;
+
+  if (status === "completed") {
+    return renderStageSummary({
+      number: 2,
+      title: "Setup",
+      summary: recommendation
+        ? `${recommendation.primaryOffer || "Strategy"} valmis kohteelle ${recommendation.primaryAudience || "selected audience"}.`
+        : "Setup exists.",
+      status,
+      primaryAction: {
+        kind: "focus",
+        label: "Open generate",
+        target: "[data-guide='generate']"
+      },
+      secondaryAction: {
+        kind: "action",
+        label: "Refresh setup",
+        action: "recommend",
+        ghost: true
+      }
+    });
+  }
+
+  if (status === "upcoming") {
+    return renderStageSummary({
+      number: 2,
+      title: "Setup",
+      summary: "This stage opens after a client brief exists.",
+      status,
+      primaryAction: {
+        kind: "drawer",
+        label: "Add client",
+        drawer: "new-client"
+      }
+    });
+  }
 
   return `
-    <div class="intake-frame stage-card ${getStageSurfaceClass(client, "setup")}" data-guide="intake">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">2 / 5</span>
-          <h4>Setup</h4>
-        </div>
-        <p>${recommendation ? "Ready" : "Review"}</p>
+    <section class="workflow-stage workflow-stage-active">
+      ${renderStageGate({
+        number: 2,
+        title: "Setup",
+        description: recommendation
+          ? "Review the saved strategy before you move into generation."
+          : "Turn the brief into a usable setup for Lumix.",
+        readyItems,
+        blocker: recommendation ? "" : "Generate setup to unlock asset generation.",
+        primaryAction: {
+          kind: "action",
+          label: recommendation ? "Refresh setup" : "Generate setup",
+          action: "recommend"
+        },
+        secondaryAction: recommendation
+          ? {
+              kind: "toggle-setup",
+              label: mode === "review" ? "Edit setup" : "Review setup",
+              mode: mode === "review" ? "edit" : "review",
+              ghost: true
+            }
+          : null,
+        tone: "current"
+      })}
+      <div class="intake-frame stage-card ${getStageSurfaceClass(client, "setup")}" data-guide="intake">
+        ${mode === "review" ? reviewBody : editBody}
       </div>
-
-      <div class="magic-results-panel">
-        <div class="magic-results-head">
-          <div>
-            <span class="section-kicker">Business brief</span>
-            <p class="body-copy stage-inline-note">${escapeHtml(client.description)}</p>
-          </div>
-          <div class="magic-results-badges">
-            <span class="flow-pill">${escapeHtml(getCatalogLabel("goalType", profile.goalType || ""))}</span>
-            <span class="flow-pill">${escapeHtml(getCatalogLabel("toneType", profile.toneType || ""))}</span>
-          </div>
-        </div>
-
-        ${
-          recommendation
-            ? `
-              <div class="magic-results-grid">
-                <article class="magic-result-card">
-                  <span>Positioning</span>
-                  <strong>${escapeHtml(recommendation.positioning || "Not set")}</strong>
-                </article>
-                <article class="magic-result-card">
-                  <span>Offer</span>
-                  <strong>${escapeHtml(recommendation.primaryOffer || "Not set")}</strong>
-                </article>
-                <article class="magic-result-card">
-                  <span>Audience</span>
-                  <strong>${escapeHtml(recommendation.primaryAudience || "Not set")}</strong>
-                </article>
-                <article class="magic-result-card">
-                  <span>CTA</span>
-                  <strong>${escapeHtml(recommendation.ctaStrategy || "Not set")}</strong>
-                </article>
-              </div>
-
-              <div class="strategy-visual-layout">
-                <article class="magic-preview-card strategy-structure-card">
-                  <span class="section-kicker">Homepage structure</span>
-                  ${renderStructurePreview(recommendation.homepageStructure)}
-                </article>
-
-                <article class="magic-preview-card strategy-angles-card">
-                  <span class="section-kicker">Content angles</span>
-                  <div class="angle-card-grid">
-                    ${(recommendation.contentAngles || [])
-                      .map(
-                        (angle, index) => `
-                          <article class="angle-card">
-                            <span>${index + 1}</span>
-                            <strong>${escapeHtml(angle)}</strong>
-                          </article>
-                        `
-                      )
-                      .join("")}
-                  </div>
-                </article>
-
-                <article class="magic-preview-card strategy-cta-card">
-                  <span class="section-kicker">CTA focus</span>
-                  <div class="cta-focus-pill">${escapeHtml(recommendation.ctaStrategy || "Not set")}</div>
-                  <p class="body-copy">${escapeHtml(recommendation.summary || "No summary")}</p>
-                  <p class="body-copy">Updated ${escapeHtml(formatDate(recommendation.updatedAt))}</p>
-                </article>
-              </div>
-            `
-            : `
-              <article class="magic-preview-card">
-                <span class="section-kicker">No saved setup yet</span>
-                <p class="body-copy">Generate setup from this brief.</p>
-              </article>
-            `
-        }
-
-        <div class="stage-actions">
-          <button type="button" class="${current ? "" : "ghost-button"}" data-action="recommend">
-            ${recommendation ? "Refresh setup" : "Generate setup"}
-          </button>
-        </div>
-      </div>
-
-      <details class="stage-subdetails"${setupDetailsOpen}>
-        <summary>Edit setup</summary>
-        <form class="stack-form intake-form" data-intake-form>
-          <div class="inline-grid">
-            <label>
-              <span>Business type</span>
-              <select name="businessType">
-                ${renderSelectOptions(
-                  intakeCatalog.businessType,
-                  profile.businessType || "",
-                  "Select business type"
-                )}
-              </select>
-            </label>
-            <label>
-              <span>Target audience</span>
-              <select name="audienceType">
-                ${renderSelectOptions(
-                  intakeCatalog.audienceType,
-                  profile.audienceType || "",
-                  "Select audience"
-                )}
-              </select>
-            </label>
-          </div>
-
-          <div class="inline-grid">
-            <label>
-              <span>Primary goal</span>
-              <select name="goalType">
-                ${renderSelectOptions(intakeCatalog.goalType, profile.goalType || "", "Select goal")}
-              </select>
-            </label>
-            <label>
-              <span>Main CTA</span>
-              <input
-                name="mainCta"
-                placeholder="Request a quote / Book a demo / Start free trial"
-                value="${escapeHtml(profile.mainCta || "")}"
-              />
-            </label>
-          </div>
-
-          <div class="inline-grid">
-            <label>
-              <span>Offer type</span>
-              <select name="offerType">
-                ${renderSelectOptions(intakeCatalog.offerType, profile.offerType || "", "Select offer")}
-              </select>
-            </label>
-            <label>
-              <span>Tone</span>
-              <select name="toneType">
-                ${renderSelectOptions(intakeCatalog.toneType, profile.toneType || "", "Select tone")}
-              </select>
-            </label>
-          </div>
-
-          <div class="inline-grid">
-            <label>
-              <span>Price position</span>
-              <select name="pricePosition">
-                ${renderSelectOptions(intakeCatalog.pricePosition, profile.pricePosition || "", "Select price")}
-              </select>
-            </label>
-            <label>
-              <span>Geo focus</span>
-              <input
-                name="geoFocus"
-                placeholder="Finland, Helsinki, online..."
-                value="${escapeHtml(profile.geoFocus || "")}"
-              />
-            </label>
-          </div>
-
-          <label>
-            <span>Notes</span>
-            <textarea name="notes" rows="4" placeholder="Add any extra direction for Lumix.">${escapeHtml(notes)}</textarea>
-          </label>
-
-          <button type="submit" class="ghost-button">Save setup</button>
-        </form>
-      </details>
-    </div>
+    </section>
   `;
 }
 
@@ -2093,194 +2398,243 @@ function renderGenerateStage(client) {
   const runtime = getLumixRuntime(client);
   const generateEligibility = runtime.actions.generate_pack;
   const outputsReady = hasContent(client);
-  const current = isCurrentStep(client, "generate");
+  const status = getStepStatus(client, "generate");
 
-  if (!generateEligibility.ready && !hasContent(client)) {
-    return `
-      <div class="stage-card stage-card-locked ${getStageSurfaceClass(client, "generate")}" data-guide="generate">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">3 / 5</span>
-            <h4>Generate all</h4>
-          </div>
-          <p>Waiting</p>
-        </div>
+  if (status === "completed") {
+    return renderStageSummary({
+      number: 3,
+      title: "Generate",
+      summary: `Landing page, ${client.blogs.length} blog drafts and SEO package created.`,
+      status,
+      primaryAction: {
+        kind: "focus",
+        label: "Open preview",
+        target: "[data-guide='preview']"
+      },
+      secondaryAction: {
+        kind: "action",
+        label: "Generate again",
+        action: "generate",
+        ghost: true
+      }
+    });
+  }
+
+  if (status === "upcoming") {
+    return renderStageSummary({
+      number: 3,
+      title: "Generate",
+      summary: generateEligibility.reason || "This stage unlocks after setup is ready.",
+      status,
+      primaryAction: {
+        kind: "focus",
+        label: "Open setup",
+        target: "[data-guide='intake']"
+      }
+    });
+  }
+
+  return `
+    <section class="workflow-stage workflow-stage-active">
+      ${renderStageGate({
+        number: 3,
+        title: "Generate all",
+        description: "Create the landing page, 3 blog drafts and SEO package in one run.",
+        readyItems: ["Setup saved", "Strategy ready"],
+        blocker: generateEligibility.reason || "",
+        primaryAction: {
+          kind: "action",
+          label: outputsReady ? "Generate again" : "Generate all",
+          action: "generate"
+        },
+        secondaryAction: {
+          kind: "focus",
+          label: "Review setup",
+          target: "[data-guide='intake']",
+          ghost: true
+        },
+        tone: "current"
+      })}
+      <div class="stage-card ${getStageSurfaceClass(client, "generate")}" data-guide="generate">
         <div class="generate-asset-grid">
           <article class="generate-asset-card">
             <div class="generate-asset-head">
               <strong>Landing page</strong>
-              <span class="generate-asset-badge">Queued</span>
+              <span class="generate-asset-badge${outputsReady && client.website?.html ? " generate-asset-badge-ready" : ""}">
+                ${client.website?.html ? "Created" : "Ready"}
+              </span>
             </div>
             ${renderWebsiteMockPreview(client, true)}
           </article>
+
           <article class="generate-asset-card">
             <div class="generate-asset-head">
               <strong>Blog pack</strong>
-              <span class="generate-asset-badge">Queued</span>
+              <span class="generate-asset-badge${client.blogs.length ? " generate-asset-badge-ready" : ""}">
+                ${client.blogs.length ? `${client.blogs.length} drafts` : "3 drafts"}
+              </span>
             </div>
-            ${renderBlogAssetStack([], true)}
+            ${renderBlogAssetStack(client.blogs, true)}
           </article>
+
           <article class="generate-asset-card">
             <div class="generate-asset-head">
               <strong>SEO package</strong>
-              <span class="generate-asset-badge">Queued</span>
+              <span class="generate-asset-badge${client.seo ? " generate-asset-badge-ready" : ""}">
+                ${client.seo ? "Created" : "Ready"}
+              </span>
             </div>
-            ${renderSeoAssetPreview(null, true)}
+            ${renderSeoAssetPreview(client.seo, true)}
           </article>
         </div>
-        <p class="body-copy">${escapeHtml(generateEligibility.reason || "Täytä tiedot ensin.")}</p>
       </div>
-    `;
-  }
-
-  return `
-    <div class="stage-card ${getStageSurfaceClass(client, "generate")}" data-guide="generate">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">3 / 5</span>
-          <h4>Generate all</h4>
-        </div>
-        <p>Output inventory</p>
-      </div>
-
-      <div class="stage-actions">
-        <button type="button" class="${current ? "" : "ghost-button"}" data-action="generate">${outputsReady ? "Generate again" : "Generate all"}</button>
-      </div>
-
-      <div class="generate-asset-grid">
-        <article class="generate-asset-card">
-          <div class="generate-asset-head">
-            <strong>Landing page</strong>
-            <span class="generate-asset-badge${outputsReady && client.website?.html ? " generate-asset-badge-ready" : ""}">
-              ${client.website?.html ? "Created" : "Ready"}
-            </span>
-          </div>
-          ${renderWebsiteMockPreview(client, true)}
-        </article>
-
-        <article class="generate-asset-card">
-          <div class="generate-asset-head">
-            <strong>Blog pack</strong>
-            <span class="generate-asset-badge${client.blogs.length ? " generate-asset-badge-ready" : ""}">
-              ${client.blogs.length ? `${client.blogs.length} drafts` : "3 drafts"}
-            </span>
-          </div>
-          ${renderBlogAssetStack(client.blogs, true)}
-        </article>
-
-        <article class="generate-asset-card">
-          <div class="generate-asset-head">
-            <strong>SEO package</strong>
-            <span class="generate-asset-badge${client.seo ? " generate-asset-badge-ready" : ""}">
-              ${client.seo ? "Created" : "Ready"}
-            </span>
-          </div>
-          ${renderSeoAssetPreview(client.seo, true)}
-        </article>
-      </div>
-
-      <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Landing page ${client.website?.html ? "ready" : "pending"}</span>
-        <span class="flow-pill">Blog posts ${client.blogs.length}</span>
-        <span class="flow-pill">SEO ${client.seo ? "ready" : "pending"}</span>
-      </div>
-    </div>
+    </section>
   `;
 }
 
 function renderPreviewStage(client) {
-  const current = isCurrentStep(client, "preview");
+  const status = getStepStatus(client, "preview");
 
   if (!hasContent(client)) {
-    return `
-      <div class="stage-card stage-card-locked ${getStageSurfaceClass(client, "preview")}">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">4 / 5</span>
-            <h4>Näe lopputulos</h4>
-          </div>
-          <p>Waiting</p>
-        </div>
-        <p class="body-copy">The generated page, blogs and SEO will appear here.</p>
-      </div>
-    `;
+    return renderStageSummary({
+      number: 4,
+      title: "Preview",
+      summary: "Preview opens after generation is complete.",
+      status: "upcoming",
+      primaryAction: {
+        kind: "focus",
+        label: "Open generate",
+        target: "[data-guide='generate']"
+      }
+    });
   }
 
   const visibleBlogs = client.blogs.slice(0, 3);
   const recommendation = client.strategyRecommendation;
+  const previewTab = getPreviewTab(client);
+  const previewTabs = [
+    { key: "landing", label: "Landing" },
+    { key: "blogs", label: "Blogs" },
+    { key: "seo", label: "SEO" }
+  ];
+
+  const previewPane =
+    previewTab === "blogs"
+      ? `
+          <div class="preview-pane-card">
+            ${renderBlogAssetStack(visibleBlogs)}
+          </div>
+        `
+      : previewTab === "seo"
+        ? `
+            <div class="preview-pane-card">
+              ${renderSeoAssetPreview(client.seo)}
+            </div>
+          `
+        : `
+            <div class="preview-pane-card">
+              ${renderWebsiteMockPreview(client)}
+            </div>
+          `;
+
+  if (status === "completed") {
+    return renderStageSummary({
+      number: 4,
+      title: "Preview",
+      summary: "Preview checked. Content is ready for publish.",
+      status,
+      primaryAction: {
+        kind: "link",
+        label: "Open preview",
+        href: `/client/${client.id}`,
+        targetBlank: true
+      },
+      secondaryAction: {
+        kind: "focus",
+        label: "Open publish",
+        target: "[data-guide='publish']"
+      }
+    });
+  }
 
   return `
-    <div class="stage-card ${getStageSurfaceClass(client, "preview")}" data-guide="preview">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">4 / 5</span>
-          <h4>Preview</h4>
-        </div>
-        <p>Review</p>
-      </div>
-
-      <div class="stage-actions">
-        <a class="${current ? "cta-link" : "ghost-link"} compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Review preview</a>
-      </div>
-
-      <div class="preview-visual-layout">
-        <div class="preview-primary-panel">
-          ${renderWebsiteMockPreview(client)}
-        </div>
-
-        <div class="preview-side-grid">
-          <article class="preview-asset-card">
-            <div class="generate-asset-head">
-              <strong>Blog pack</strong>
-              <span class="generate-asset-badge generate-asset-badge-ready">${visibleBlogs.length} visible</span>
-            </div>
-            ${renderBlogAssetStack(visibleBlogs)}
-          </article>
-
-          <article class="preview-asset-card">
-            <div class="generate-asset-head">
-              <strong>SEO package</strong>
-              <span class="generate-asset-badge generate-asset-badge-ready">${client.seo?.slug ? "Live snippet" : "Ready"}</span>
-            </div>
-            ${renderSeoAssetPreview(client.seo)}
-          </article>
-
-          ${
-            recommendation
-              ? `
-                <article class="preview-asset-card preview-strategy-card">
-                  <span class="section-kicker">Strategy alignment</span>
-                  <strong>${escapeHtml(recommendation.primaryOffer || client.businessName)}</strong>
-                  <p>${escapeHtml(truncateText(recommendation.positioning || "", 118))}</p>
-                  ${renderStructurePreview(recommendation.homepageStructure, true)}
-                </article>
+    <section class="workflow-stage workflow-stage-active">
+      ${renderStageGate({
+        number: 4,
+        title: "Preview",
+        description: "Review one content view at a time before you move into publish.",
+        readyItems: [
+          client.website?.html ? "Landing ready" : "",
+          client.blogs.length ? `${client.blogs.length} blogs ready` : "",
+          client.seo ? "SEO ready" : ""
+        ].filter(Boolean),
+        blocker: client.publishTargets.length ? "" : "Add a publish channel after review to unlock go live.",
+        primaryAction: client.publishTargets.length
+          ? {
+              kind: "focus",
+              label: "Open publish",
+              target: "[data-guide='publish']"
+            }
+          : {
+              kind: "link",
+              label: "Open full preview",
+              href: `/client/${client.id}`,
+              targetBlank: true
+            },
+        secondaryAction: client.publishTargets.length
+          ? {
+              kind: "link",
+              label: "Open full preview",
+              href: `/client/${client.id}`,
+              targetBlank: true,
+              ghost: true
+            }
+          : {
+              kind: "drawer",
+              label: "Add publish channel",
+              drawer: "advanced",
+              ghost: true
+            },
+        tone: "current"
+      })}
+      <div class="stage-card ${getStageSurfaceClass(client, "preview")}" data-guide="preview">
+        <div class="preview-tabs" role="tablist" aria-label="Preview views">
+          ${previewTabs
+            .map(
+              (tab) => `
+                <button
+                  type="button"
+                  class="preview-tab${previewTab === tab.key ? " preview-tab-active" : ""}"
+                  data-preview-tab="${escapeHtml(tab.key)}"
+                >
+                  ${escapeHtml(tab.label)}
+                </button>
               `
-              : ""
-          }
+            )
+            .join("")}
         </div>
+
+        ${previewPane}
+
+        ${
+          recommendation
+            ? `
+              <div class="preview-support-strip">
+                <div class="preview-support-card">
+                  <span class="section-kicker">Strategy fit</span>
+                  <strong>${escapeHtml(recommendation.primaryOffer || client.businessName)}</strong>
+                  <p class="body-copy">${escapeHtml(truncateText(recommendation.positioning || "", 118))}</p>
+                </div>
+                <div class="preview-support-card preview-support-card-compact">
+                  <span class="section-kicker">Homepage structure</span>
+                  ${renderStructurePreview(recommendation.homepageStructure, true)}
+                </div>
+              </div>
+            `
+            : ""
+        }
       </div>
-
-      <details class="stage-subdetails">
-        <summary>Inspect generated page markup</summary>
-        <div class="site-frame stage-preview-frame">
-          <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
-        </div>
-      </details>
-
-      <details class="stage-subdetails">
-        <summary>Inspect blog drafts</summary>
-        <div class="blog-frame stage-preview-frame">
-          <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
-        </div>
-      </details>
-
-      <details class="stage-subdetails">
-        <summary>Inspect SEO fields</summary>
-        <div class="seo-frame stage-preview-frame">
-          ${renderSeo(client.seo)}
-        </div>
-      </details>
-    </div>
+    </section>
   `;
 }
 
@@ -2288,75 +2642,97 @@ function renderPublishStage(client) {
   const runtime = getLumixRuntime(client);
   const publishEligibility = runtime.actions.publish_pack;
   const publishReadiness = getPublishReadiness(client);
-  const current = isCurrentStep(client, "publish");
+  const status = getStepStatus(client, "publish");
 
-  if (!publishEligibility.ready && !hasContent(client)) {
-    return `
-      <div class="stage-card stage-card-locked ${getStageSurfaceClass(client, "publish")}" data-guide="publish">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">5 / 5</span>
-          <h4>Publish</h4>
-        </div>
-        <p>Waiting</p>
-      </div>
-      <p class="body-copy">${escapeHtml(publishEligibility.reason || "Generoi ensin sisältö.")}</p>
-    </div>
-    `;
+  if (status === "upcoming" && !hasContent(client)) {
+    return renderStageSummary({
+      number: 5,
+      title: "Publish",
+      summary: publishEligibility.reason || "Publish opens after assets are ready.",
+      status,
+      primaryAction: {
+        kind: "focus",
+        label: "Open preview",
+        target: "[data-guide='preview']"
+      }
+    });
+  }
+
+  if (status === "completed" && client.publishHistory.length) {
+    return renderStageSummary({
+      number: 5,
+      title: "Publish",
+      summary: `Published ${formatDate(client.publishHistory[0].createdAt)}.`,
+      status,
+      primaryAction: {
+        kind: "focus",
+        label: "View publish",
+        target: "[data-guide='publish']"
+      }
+    });
   }
 
   return `
-    <div class="stage-card ${getStageSurfaceClass(client, "publish")}" data-guide="publish">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">5 / 5</span>
-          <h4>Publish</h4>
+    <section class="workflow-stage workflow-stage-active">
+      ${renderStageGate({
+        number: 5,
+        title: "Publish",
+        description: publishReadiness.ready
+          ? "Go live when the preview looks right."
+          : "Resolve the publish blocker before you go live.",
+        readyItems: [
+          hasContent(client) ? "Content pack ready" : "",
+          client.publishTargets.length ? `${client.publishTargets.length} channel connected` : "",
+          client.publishHistory.length ? "Already published" : ""
+        ].filter(Boolean),
+        blocker: publishReadiness.ready ? "" : publishReadiness.text,
+        primaryAction: publishEligibility.ready
+          ? {
+              kind: "action",
+              label: "Publish",
+              action: "publish-all"
+            }
+          : {
+              kind: "focus",
+              label: "Resolve blocker",
+              target: publishReadiness.target
+            },
+        secondaryAction: {
+          kind: "focus",
+          label: "Review preview",
+          target: "[data-guide='preview']",
+          ghost: true
+        },
+        tone: "current"
+      })}
+      <div class="stage-card ${getStageSurfaceClass(client, "publish")}" data-guide="publish">
+        <div class="publish-readiness-card publish-readiness-card-${publishReadiness.tone}">
+          <div class="publish-readiness-head">
+            <strong>${escapeHtml(publishReadiness.title)}</strong>
+            <span class="publish-readiness-badge">${escapeHtml(publishReadiness.ready ? "Ready" : "Blocked")}</span>
+          </div>
+          <p class="body-copy">${escapeHtml(publishReadiness.text)}</p>
+          <div class="publish-check-list">
+            <span class="publish-check-item ${hasContent(client) ? "publish-check-item-done" : ""}">Content pack</span>
+            <span class="publish-check-item ${client.publishTargets.length ? "publish-check-item-done" : ""}">Publish channel</span>
+            <span class="publish-check-item ${client.publishHistory.length ? "publish-check-item-done" : ""}">Go live</span>
+          </div>
         </div>
-        <p>${publishReadiness.ready ? "Ready" : "Blocked"}</p>
+
+        ${
+          client.leads.length || client.analytics.leadSubmits
+            ? `
+              <details class="stage-subdetails">
+                <summary>Recent leads</summary>
+                <div class="mini-list">
+                  ${renderLeads(client.leads.slice(0, 3))}
+                </div>
+              </details>
+            `
+            : ""
+        }
       </div>
-
-      <div class="publish-readiness-card publish-readiness-card-${publishReadiness.tone}">
-        <div class="publish-readiness-head">
-          <strong>${escapeHtml(publishReadiness.title)}</strong>
-          <span class="publish-readiness-badge">${escapeHtml(publishReadiness.ready ? "Ready" : "Blocked")}</span>
-        </div>
-        <p class="body-copy">${escapeHtml(publishReadiness.text)}</p>
-        <div class="publish-check-list">
-          <span class="publish-check-item ${hasContent(client) ? "publish-check-item-done" : ""}">Content pack</span>
-          <span class="publish-check-item ${client.publishTargets.length ? "publish-check-item-done" : ""}">Publish channel</span>
-          <span class="publish-check-item ${client.publishHistory.length ? "publish-check-item-done" : ""}">Go live</span>
-        </div>
-      </div>
-
-      ${publishEligibility.reason && !publishReadiness.ready ? `<p class="body-copy">${escapeHtml(publishEligibility.reason)}</p>` : ""}
-
-      ${
-        publishEligibility.ready
-          ? `
-            <div class="stage-actions">
-              <button type="button" class="${current ? "" : "ghost-button"}" data-action="publish-all">Publish</button>
-            </div>
-          `
-          : `
-            <div class="stage-actions">
-              <button type="button" class="ghost-button" data-flow-target="${escapeHtml(publishReadiness.target)}">Resolve blocker</button>
-            </div>
-          `
-      }
-
-      ${
-        client.leads.length || client.analytics.leadSubmits
-          ? `
-            <details class="stage-subdetails">
-              <summary>Näytä liidit</summary>
-              <div class="mini-list">
-                ${renderLeads(client.leads.slice(0, 3))}
-              </div>
-            </details>
-          `
-          : ""
-      }
-    </div>
+    </section>
   `;
 }
 
@@ -2389,6 +2765,58 @@ function renderLeadsStage(client) {
   `;
 }
 
+function renderClientInspectPanel(client) {
+  if (!hasContent(client) && !client.strategyRecommendation) return "";
+
+  const visibleBlogs = client.blogs.slice(0, 3);
+  const recommendation = client.strategyRecommendation;
+
+  return `
+    <section class="panel client-ops-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Inspect outputs</h2>
+          <p>Developer-only näkymä generoituun dataan ja tallennettuihin kenttiin.</p>
+        </div>
+      </div>
+
+      ${
+        recommendation
+          ? `
+            <div class="preview-inspect-card">
+              <span class="section-kicker">Strategy alignment</span>
+              <strong>${escapeHtml(recommendation.primaryOffer || client.businessName)}</strong>
+              <p class="body-copy">${escapeHtml(truncateText(recommendation.positioning || "", 118))}</p>
+              ${renderStructurePreview(recommendation.homepageStructure, true)}
+            </div>
+          `
+          : ""
+      }
+
+      <div class="preview-inspect-grid">
+        <article class="preview-inspect-card">
+          <span class="section-kicker">Inspect generated page markup</span>
+          <div class="site-frame stage-preview-frame">
+            <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
+          </div>
+        </article>
+        <article class="preview-inspect-card">
+          <span class="section-kicker">Inspect blog drafts</span>
+          <div class="blog-frame stage-preview-frame">
+            <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
+          </div>
+        </article>
+        <article class="preview-inspect-card">
+          <span class="section-kicker">Inspect SEO fields</span>
+          <div class="seo-frame stage-preview-frame">
+            ${renderSeo(client.seo)}
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderClientExtras(client) {
   const history = client.generationHistory.length
     ? `
@@ -2407,10 +2835,15 @@ function renderClientExtras(client) {
   const lumixAction = lumixActionState.get(client.id);
 
   return `
-    <details class="panel client-ops-panel">
-      <summary>Lisäasetukset</summary>
+    <section class="panel client-ops-panel" data-client-id="${client.id}">
+      <div class="panel-head">
+        <div>
+          <h2>Advanced client settings</h2>
+          <p>Publish config, promptit, historia ja debug ovat täällä erillään pääflow’sta.</p>
+        </div>
+      </div>
 
-      <div class="client-extra-stack" data-client-id="${client.id}">
+      <div class="client-extra-stack">
         <div class="editor-frame ops-box">
           <h4>Ohje agentille</h4>
           <p class="body-copy">Tallenna tähän vain asiakaskohtaiset lisätoiveet.</p>
@@ -2551,7 +2984,29 @@ function renderClientExtras(client) {
           </details>
         </div>
       </div>
-    </details>
+    </section>
+  `;
+}
+
+function renderClientAdvancedPanel(client) {
+  if (!client) {
+    return `
+      <section class="panel client-ops-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Client advanced</h2>
+            <p>Valitse ensin aktiivinen asiakas, niin advanced client controls tulevat tähän.</p>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <div class="client-advanced-stack">
+      ${renderClientExtras(client)}
+      ${renderClientInspectPanel(client)}
+    </div>
   `;
 }
 
@@ -2570,6 +3025,7 @@ function renderEmptyWorkspace() {
         <span class="section-kicker">Lumix</span>
         <strong>Lumix auttaa seuraavassa vaiheessa, mutta itse työ tehdään tässä workflow’ssa.</strong>
         <div class="stage-actions">
+          <button type="button" class="ghost-button" data-open-drawer="new-client">+ New client</button>
           <button type="button" class="ghost-button" data-empty-action="lumix">Käynnistä Lumix</button>
         </div>
       </div>
@@ -2578,7 +3034,12 @@ function renderEmptyWorkspace() {
 }
 
 function renderClientSelector(clients) {
-  clientsCaption.textContent = formatClientCount(clients.length);
+  const filteredClients = getFilteredClients(clients);
+
+  clientsCaption.textContent =
+    filteredClients.length === clients.length
+      ? formatClientCount(clients.length)
+      : `${formatClientCount(filteredClients.length)} / ${formatClientCount(clients.length)}`;
 
   if (!clients.length) {
     clientsList.innerHTML = '<article class="mini-card"><p>Ei asiakkaita vielä.</p></article>';
@@ -2586,9 +3047,14 @@ function renderClientSelector(clients) {
     return;
   }
 
+  if (!filteredClients.length) {
+    clientsList.innerHTML = '<article class="mini-card"><p>No matching clients for this search.</p></article>';
+    return;
+  }
+
   const activeId = state.activeClientId;
 
-  clientsList.innerHTML = clients
+  clientsList.innerHTML = filteredClients
     .map(
       (client) => {
         const statusLabel = getCurrentFlowStep(client)?.title || "Valmis";
@@ -2611,8 +3077,6 @@ function renderClientSelector(clients) {
 }
 
 function renderActiveClient(client) {
-  const guide = getWorkflowGuide(client);
-
   activeClientView.innerHTML = `
     <article class="panel workflow-card" data-client-id="${client.id}">
       <div class="workflow-header">
@@ -2623,22 +3087,19 @@ function renderActiveClient(client) {
         </div>
         <div class="workflow-header-meta">
           <span class="client-status">${escapeHtml(client.billingStatus)}</span>
-          <span class="workflow-header-pill">${escapeHtml(guide.stateLabel)}</span>
-          <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(guide.publishReadiness.title)}</span>
         </div>
       </div>
 
-      ${renderWorkflowFocus(client)}
+      ${renderStickyStageHeader(client)}
 
       <div class="workflow-stage-stack">
+        ${renderClientStage(client)}
         ${renderIntake(client)}
         ${renderGenerateStage(client)}
         ${renderPreviewStage(client)}
         ${renderPublishStage(client)}
       </div>
     </article>
-
-    ${renderClientExtras(client)}
   `;
 }
 
@@ -2657,17 +3118,38 @@ function render() {
   renderLumixPanel();
 
   agencyTitle.textContent = `${state.bootstrap.user.agencyName}`;
-  document.getElementById("team-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
-  document.getElementById("report-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
-  document.getElementById("send-report-button").classList.toggle("hidden", state.bootstrap.user.role === "member");
-
+  const workspaceName = state.bootstrap.user.agencyName || "Lumix Workspace";
+  const userName = state.bootstrap.user.email || "Lumix User";
+  const roleLabel = state.bootstrap.user.role === "owner" ? "Workspace owner" : state.bootstrap.user.role;
   const activeClient = getActiveClient();
+  const initials = getInitials(workspaceName, userName) || "LU";
+
+  if (sidebarBrandTitle) sidebarBrandTitle.textContent = workspaceName;
+  if (sidebarBrandSubtitle) {
+    sidebarBrandSubtitle.textContent = activeClient
+      ? `${getCurrentFlowStep(activeClient).title} is the active stage`
+      : "Guided marketing system";
+  }
+  if (sidebarUserName) sidebarUserName.textContent = userName;
+  if (sidebarUserRole) sidebarUserRole.textContent = roleLabel;
+  if (sidebarUserAvatar) sidebarUserAvatar.textContent = initials;
+  if (iconRailAvatarLabel) iconRailAvatarLabel.textContent = initials;
+  if (workspacePopoverTitle) workspacePopoverTitle.textContent = workspaceName;
+  if (workspacePopoverName) workspacePopoverName.textContent = workspaceName;
+  if (workspacePopoverMeta) workspacePopoverMeta.textContent = `${clients.length} active client workspaces`;
+  if (profilePopoverName) profilePopoverName.textContent = userName;
+
+  syncSidebarActiveState();
+  document.getElementById("team-form")?.classList.toggle("hidden", state.bootstrap.user.role === "member");
+  document.getElementById("report-form")?.classList.toggle("hidden", state.bootstrap.user.role === "member");
+  document.getElementById("send-report-button")?.classList.toggle("hidden", state.bootstrap.user.role === "member");
+
   if (flowRailList) {
     flowRailList.innerHTML = renderFlowRail(activeClient);
   }
   if (flowRailCaption) {
     flowRailCaption.textContent = activeClient
-      ? `Now: ${getWorkflowGuide(activeClient).heading}`
+      ? `Now: ${getCurrentFlowStep(activeClient).title}`
       : "Five steps from brief to publish.";
   }
 
@@ -2677,6 +3159,10 @@ function render() {
     renderActiveClient(activeClient);
   } else {
     renderEmptyWorkspace();
+  }
+
+  if (clientAdvancedView) {
+    clientAdvancedView.innerHTML = renderClientAdvancedPanel(activeClient || null);
   }
 
   if (!state.tourInitialized) {
@@ -2733,7 +3219,68 @@ document.getElementById("logout-button").addEventListener("click", async () => {
   });
 });
 
-document.getElementById("client-form").addEventListener("submit", async (event) => {
+newClientTrigger?.addEventListener("click", () => {
+  openDrawer("new-client");
+});
+
+advancedToggle?.addEventListener("click", () => {
+  closePopover();
+  openDrawer("advanced");
+});
+
+workspaceSwitcherButton?.addEventListener("click", () => {
+  togglePopover("workspace");
+});
+
+profileMenuButton?.addEventListener("click", () => {
+  togglePopover("profile");
+});
+
+iconRailProfileButton?.addEventListener("click", () => {
+  togglePopover("profile");
+});
+
+sidebarSearch?.addEventListener("input", (event) => {
+  state.sidebarQuery = event.currentTarget.value || "";
+  state.sidebarSection = "clients";
+  render();
+});
+
+document.addEventListener("click", (event) => {
+  const sidebarTargetButton = event.target.closest("[data-sidebar-target], [data-rail-target]");
+  if (sidebarTargetButton) {
+    focusSidebarSection(sidebarTargetButton.dataset.sidebarTarget || sidebarTargetButton.dataset.railTarget);
+    return;
+  }
+
+  const openButton = event.target.closest("[data-open-drawer]");
+  if (openButton) {
+    openDrawer(openButton.dataset.openDrawer);
+    return;
+  }
+
+  const closeButton = event.target.closest("[data-close-drawer]");
+  if (closeButton) {
+    closeDrawer(closeButton.dataset.closeDrawer);
+    return;
+  }
+
+  const clickedPopoverToggle = event.target.closest("#workspace-switcher-button, #profile-menu-button, #icon-rail-profile-button");
+  const insidePopover = event.target.closest(".dashboard-popover");
+
+  if (!clickedPopoverToggle && !insidePopover) {
+    closePopover();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeAllDrawers();
+    closePopover();
+  }
+});
+
+clientForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const raw = readForm(form);
@@ -2770,6 +3317,7 @@ document.getElementById("client-form").addEventListener("submit", async (event) 
     }
 
     form.reset();
+    closeDrawer("new-client");
     state.activeClientId = result.client?.id || state.activeClientId;
     setStatus(`Setup generated for ${payload.businessName}.`);
     await refresh();
@@ -2845,6 +3393,7 @@ clientsList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-client-select]");
   if (!button) return;
   state.activeClientId = Number(button.dataset.clientSelect);
+  state.sidebarSection = "clients";
   render();
 });
 
@@ -2854,7 +3403,7 @@ flowRailList?.addEventListener("click", (event) => {
   highlightGuideTarget(button.dataset.flowTarget);
 });
 
-activeClientView.addEventListener("submit", async (event) => {
+async function handleClientAreaSubmit(event) {
   const intakeForm = event.target.closest("form[data-intake-form]");
   if (intakeForm) {
     event.preventDefault();
@@ -2886,11 +3435,11 @@ activeClientView.addEventListener("submit", async (event) => {
 
       await refresh();
     });
-    return;
+    return true;
   }
 
   const form = event.target.closest("form[data-target-form]");
-  if (!form) return;
+  if (!form) return false;
   event.preventDefault();
 
   const clientId = Number(form.closest("[data-client-id]")?.dataset.clientId);
@@ -2910,27 +3459,48 @@ activeClientView.addEventListener("submit", async (event) => {
     form.reset();
     await refresh();
   });
-});
+  return true;
+}
 
-activeClientView.addEventListener("click", async (event) => {
+async function handleClientAreaClick(event) {
   const emptyActionButton = event.target.closest("button[data-empty-action='lumix']");
   if (emptyActionButton) {
     activateLumix();
-    return;
+    return true;
   }
 
   const flowButton = event.target.closest("button[data-flow-target]");
   if (flowButton) {
     highlightGuideTarget(flowButton.dataset.flowTarget);
-    return;
+    return true;
+  }
+
+  const setupModeButton = event.target.closest("button[data-setup-mode]");
+  if (setupModeButton) {
+    const root = setupModeButton.closest("[data-client-id]");
+    const clientId = Number(root?.dataset.clientId);
+    if (!clientId) return;
+    state.setupModes[clientId] = setupModeButton.dataset.setupMode;
+    render();
+    return true;
+  }
+
+  const previewTabButton = event.target.closest("button[data-preview-tab]");
+  if (previewTabButton) {
+    const root = previewTabButton.closest("[data-client-id]");
+    const clientId = Number(root?.dataset.clientId);
+    if (!clientId) return;
+    state.previewTabs[clientId] = previewTabButton.dataset.previewTab;
+    render();
+    return true;
   }
 
   const button = event.target.closest("button[data-action]");
-  if (!button) return;
+  if (!button) return false;
 
   const root = button.closest("[data-client-id]");
   const clientId = Number(root?.dataset.clientId);
-  if (!clientId) return;
+  if (!clientId) return false;
 
   const client = state.bootstrap.clients.find((item) => item.id === clientId);
   const action = button.dataset.action;
@@ -2944,7 +3514,7 @@ activeClientView.addEventListener("click", async (event) => {
       setStatus(`Sisältö generoitu asiakkaalle ${client.businessName}.`);
       await refresh();
     });
-    return;
+    return true;
   }
 
   if (action === "recommend") {
@@ -2956,7 +3526,7 @@ activeClientView.addEventListener("click", async (event) => {
       setStatus(`Saved setup updated for ${client.businessName}.`);
       await refresh();
     });
-    return;
+    return true;
   }
 
   if (action === "toggle-schedule") {
@@ -2973,7 +3543,7 @@ activeClientView.addEventListener("click", async (event) => {
         await refresh();
       }
     );
-    return;
+    return true;
   }
 
   if (action === "checkout") {
@@ -2990,7 +3560,7 @@ activeClientView.addEventListener("click", async (event) => {
       }
       await refresh();
     });
-    return;
+    return true;
   }
 
   if (action === "save-prompt") {
@@ -3003,7 +3573,7 @@ activeClientView.addEventListener("click", async (event) => {
       setStatus(`Ohje tallennettu asiakkaalle ${client.businessName}.`);
       await refresh();
     });
-    return;
+    return true;
   }
 
   if (action === "publish-all") {
@@ -3018,7 +3588,7 @@ activeClientView.addEventListener("click", async (event) => {
       setStatus(`Julkaisu lisätty jonoon (#${result.job.id}).`);
       await refresh();
     });
-    return;
+    return true;
   }
 
   if (action === "publish-target") {
@@ -3034,6 +3604,23 @@ activeClientView.addEventListener("click", async (event) => {
       await refresh();
     });
   }
+  return true;
+}
+
+activeClientView.addEventListener("submit", (event) => {
+  handleClientAreaSubmit(event);
+});
+
+clientAdvancedView?.addEventListener("submit", (event) => {
+  handleClientAreaSubmit(event);
+});
+
+activeClientView.addEventListener("click", (event) => {
+  handleClientAreaClick(event);
+});
+
+clientAdvancedView?.addEventListener("click", (event) => {
+  handleClientAreaClick(event);
 });
 
 lumixButton.addEventListener("click", () => {
