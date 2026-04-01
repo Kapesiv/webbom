@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { buildLumixContext, buildLumixPromptHeader } from "./lumix.js";
+import { getOpenAiApiKey } from "./openai-config.js";
 
 const generationSchema = {
   type: "object",
@@ -292,7 +293,7 @@ function buildDemoResponse({ businessName, description }) {
 
 export function createAgencyService() {
   const model = process.env.OPENAI_MODEL || "gpt-5-mini";
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getOpenAiApiKey();
   const client = apiKey ? new OpenAI({ apiKey }) : null;
 
   async function generatePack({ businessName, description, plan = "starter", customPrompt = "" }) {

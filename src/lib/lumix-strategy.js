@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+import { getOpenAiApiKey } from "../openai-config.js";
 import { buildLumixContext, buildLumixPromptHeader, runLumixAction } from "../lumix.js";
 
 const strategySchema = {
@@ -146,7 +147,7 @@ export async function generateAndSaveStrategy(database, clientId) {
     throw new Error(actionResult.explanation?.reason || "Strategy generation is not allowed yet.");
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getOpenAiApiKey();
   const model = process.env.OPENAI_STRATEGY_MODEL || process.env.OPENAI_MODEL || "gpt-5-mini";
   let strategy;
 
