@@ -49,6 +49,13 @@ SCHEDULER_INTERVAL_MS=60000
 SESSION_TTL_DAYS=30
 QUEUE_INTERVAL_MS=3000
 QUEUE_CONCURRENCY=2
+TRUSTED_ORIGINS=http://127.0.0.1:3000
+AUTH_RATE_LIMIT_WINDOW_MS=900000
+AUTH_RATE_LIMIT_MAX=10
+PUBLIC_TRACK_RATE_LIMIT_WINDOW_MS=60000
+PUBLIC_TRACK_RATE_LIMIT_MAX=120
+PUBLIC_LEAD_RATE_LIMIT_WINDOW_MS=60000
+PUBLIC_LEAD_RATE_LIMIT_MAX=8
 ```
 
 4. Jos haluat oikean billingin, lisaa myos:
@@ -142,3 +149,4 @@ Webflow:
 - SMTP-asetukset tallennetaan SQLiteen dashboardin kautta.
 - WordPress/Webflow publish on nyt sync-tyylinen vain niin pitkalle kuin ulkoinen item-id on tiedossa; tämä on selvästi parempi kuin aiempi create-always, mutta ei viela taydellinen CMS-synkro kaksisuuntaisille muutoksille.
 - `node:sqlite` on Node:ssa edelleen experimental, mutta se piti riippuvuudet minimissa ja teki paikallisesta MVP:sta yksinkertaisemman.
+- Turvallisuutta on kovennettu origin-tarkistuksella kirjoittaville API-kutsuille, turvallisuusotsakkeilla ja kevyella rate limitingilla auth- ja public-endpointteihin.

@@ -11,6 +11,7 @@ const summaryGrid = document.getElementById("summary-grid");
 const clientsList = document.getElementById("clients-list");
 const clientsCaption = document.getElementById("clients-caption");
 const agencyTitle = document.getElementById("agency-title");
+const agencySubtitle = document.getElementById("agency-subtitle");
 const statusBanner = document.getElementById("status-banner");
 const teamList = document.getElementById("team-list");
 const reportHistory = document.getElementById("report-history");
@@ -20,8 +21,11 @@ const lumixSummary = document.getElementById("lumix-summary");
 const activeClientView = document.getElementById("active-client-view");
 const lumixCoach = document.getElementById("lumix-coach");
 const lumixButton = document.getElementById("lumix-button");
+const activeClientSelect = document.getElementById("active-client-select");
+const primaryGenerateButton = document.getElementById("primary-generate-button");
 const lumixActionState = new Map();
 const lumixAssistState = new Map();
+const previewTabState = new Map();
 let guideHighlightTimeout = null;
 const lumixTourStorageKey = "lumix-tour-dismissed-v1";
 const lumixHiddenStorageKey = "lumix-hidden-v1";
@@ -142,6 +146,46 @@ function hasProfile(client) {
 
 function hasContent(client) {
   return Boolean(client.website?.html || client.blogs?.length || client.seo);
+}
+
+function getDefaultPreviewTab(client) {
+  if (client.website?.headline || client.website?.subheadline || client.website?.html) {
+    return "landing";
+  }
+
+  if (client.blogs?.length) {
+    return "blog-0";
+  }
+
+  return "seo";
+}
+
+function getPreviewTabs(client) {
+  const tabs = [{ id: "landing", label: "Landing" }];
+  ensureArray(client.blogs).forEach((_blog, index) => {
+    tabs.push({ id: `blog-${index}`, label: `Blog ${index + 1}` });
+  });
+  tabs.push({ id: "seo", label: "SEO" });
+  return tabs;
+}
+
+function getActivePreviewTab(client) {
+  const tabs = getPreviewTabs(client);
+  const savedTab = previewTabState.get(client.id);
+  if (tabs.some((tab) => tab.id === savedTab)) {
+    return savedTab;
+  }
+  return getDefaultPreviewTab(client);
+}
+
+function stripHtmlPreview(html, maxLength = 240) {
+  const text = String(html || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
 function getLumixRuntime(client) {
@@ -707,6 +751,10 @@ function renderBlogs(blogs) {
     .join("");
 }
 
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function renderSelectOptions(options, selectedValue, placeholder) {
   const rows = [];
 
@@ -725,25 +773,46 @@ function renderSelectOptions(options, selectedValue, placeholder) {
 }
 
 function renderIntake(client) {
+  const publishState = client.publishHistory.length ? "Julkaistu" : "Kesken";
+  const nextStep = getNextStep(client);
   const profile = client.businessProfile || {};
   const notes = profile.rawNotes?.notes || "";
   const intakeCatalog = getIntakeCatalog();
 
   return `
-    <div class="intake-frame" data-guide="intake">
-      <div class="section-head">
+    <div class="stage-card client-stage-card" data-guide="intake">
+      <div class="primary-card-top">
         <div>
-          <span class="section-kicker">Vaihe 1</span>
-          <h4>Yrityksen tiedot</h4>
+          <span class="section-kicker">Client</span>
+          <h4>${escapeHtml(client.businessName)}</h4>
+          <p class="body-copy">${escapeHtml(client.description)}</p>
         </div>
-        <p>Kirjoita perussuunta.</p>
+        <div class="primary-card-meta">
+          <span class="client-status">${escapeHtml(client.billingStatus)}</span>
+          <span class="client-status">${escapeHtml(publishState)}</span>
+        </div>
       </div>
 
-      <p class="body-copy stage-inline-note">
-        ${escapeHtml(client.businessName)}: ${escapeHtml(client.description)}
-      </p>
+      <div class="flow-strip compact-stat-strip">
+        <span class="flow-pill">Paketti ${escapeHtml(client.plan)}</span>
+        <span class="flow-pill">Rytmi ${client.generationIntervalDays} pv</span>
+        <span class="flow-pill">Liidit ${client.analytics.leadSubmits}</span>
+      </div>
 
-      <form class="stack-form intake-form" data-intake-form>
+      <div class="next-step-card">
+        <span class="section-kicker">${escapeHtml(nextStep.title)}</span>
+        <strong>${escapeHtml(nextStep.text)}</strong>
+      </div>
+
+      <div class="section-head section-head-compact">
+        <div>
+          <span class="section-kicker">Asiakastiedot</span>
+          <h5>Pidä perusrunko ajan tasalla</h5>
+        </div>
+        <p>Päivitä nämä ennen strategiaa ja generointia.</p>
+      </div>
+
+      <form class="stack-form intake-form intake-form-card" data-intake-form>
         <div class="inline-grid">
           <label>
             <span>Yritystyyppi</span>
@@ -842,33 +911,38 @@ function renderRecommendation(client) {
 
   if (!hasProfile(client)) {
     return `
-      <div class="strategy-frame stage-card-locked">
+      <div class="stage-card stage-card-locked strategy-stage-card" data-guide="recommend">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 2</span>
-            <h4>Lumixin ehdotus</h4>
+            <span class="section-kicker">Strategy</span>
+            <h4>Suunta lukittuna</h4>
           </div>
-          <p>Odottaa vaihetta 1.</p>
+          <p>Client-kortti kesken.</p>
         </div>
-        <p class="body-copy">Täydennä ensin yrityksen tiedot.</p>
+        <p class="body-copy">Täydennä ensin yrityksen tiedot, niin strategia voidaan muodostaa tähän kohtaan.</p>
       </div>
     `;
   }
 
   if (!recommendation) {
     return `
-      <div class="strategy-frame">
+      <div class="stage-card strategy-stage-card" data-guide="recommend">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 2</span>
-            <h4>Lumixin ehdotus</h4>
+            <span class="section-kicker">Strategy</span>
+            <h4>Valitse suunta</h4>
           </div>
-          <p>Pyydä yksi suunta.</p>
+          <p>Lukitse viesti ennen generointia.</p>
         </div>
+
         <p class="body-copy">${escapeHtml(recommendationEligibility.reason || "Lumix ehdottaa viestin, CTA:n ja sisältökulmat.")}</p>
         ${
           recommendationEligibility.ready
-            ? '<button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä ehdotus</button>'
+            ? `
+              <div class="stage-actions stage-actions-inline">
+                <button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä strategia</button>
+              </div>
+            `
             : ""
         }
       </div>
@@ -876,13 +950,13 @@ function renderRecommendation(client) {
   }
 
   return `
-    <div class="strategy-frame">
+    <div class="stage-card strategy-stage-card" data-guide="recommend">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 2</span>
-          <h4>Lumixin ehdotus</h4>
+          <span class="section-kicker">Strategy</span>
+          <h4>Ehdotus valmis</h4>
         </div>
-        <p>Hyväksy tämä suunta ja jatka.</p>
+        <p>Pidä tämä koko ajan näkyvissä generoinnin tukena.</p>
       </div>
 
       <div class="result-two-up strategy-core-grid">
@@ -900,26 +974,24 @@ function renderRecommendation(client) {
         </div>
       </div>
 
-      <details class="stage-subdetails">
-        <summary>Näytä koko ehdotus</summary>
-
-        <div class="strategy-list">
-          <div class="seo-item">
-            <span>Pääkohderyhmä</span>
-            <strong>${escapeHtml(recommendation.primaryAudience)}</strong>
-          </div>
-          <div class="seo-item">
-            <span>Sisältökulmat</span>
-            <strong>${escapeHtml((recommendation.contentAngles || []).join(", "))}</strong>
-          </div>
-          <div class="seo-item">
-            <span>Etusivun rakenne</span>
-            <strong>${escapeHtml((recommendation.homepageStructure || []).join(" -> "))}</strong>
-          </div>
+      <div class="strategy-list strategy-list-inline">
+        <div class="seo-item">
+          <span>Pääkohderyhmä</span>
+          <strong>${escapeHtml(recommendation.primaryAudience)}</strong>
         </div>
-      </details>
+        <div class="seo-item">
+          <span>Sisältökulmat</span>
+          <strong>${escapeHtml((recommendation.contentAngles || []).join(", "))}</strong>
+        </div>
+        <div class="seo-item">
+          <span>Etusivun rakenne</span>
+          <strong>${escapeHtml((recommendation.homepageStructure || []).join(" -> "))}</strong>
+        </div>
+      </div>
 
-      <button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Päivitä ehdotus</button>
+      <div class="stage-actions stage-actions-inline">
+        <button type="button" data-action="recommend" class="ghost-button">Päivitä strategia</button>
+      </div>
     </div>
   `;
 }
@@ -1048,35 +1120,32 @@ function renderGenerateStage(client) {
 
   if (!generateEligibility.ready && !hasContent(client)) {
     return `
-      <div class="stage-card stage-card-locked">
+      <div class="stage-card stage-card-locked generate-stage-card" data-guide="generate">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 3</span>
-            <h4>Generoi kaikki</h4>
+            <span class="section-kicker">Generate</span>
+            <h4>Generointi lukittuna</h4>
           </div>
-          <p>Odottaa intakea.</p>
+          <p>Strategy puuttuu.</p>
         </div>
-        <p class="body-copy">${escapeHtml(generateEligibility.reason || "Täytä intake ensin.")}</p>
+        <p class="body-copy">Pyydä ensin strategia, jotta generointi tapahtuu oikeaan suuntaan.</p>
       </div>
     `;
   }
 
   return `
-    <div class="stage-card">
+    <div class="stage-card generate-stage-card" data-guide="generate">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 3</span>
-          <h4>Generoi kaikki</h4>
+          <span class="section-kicker">Generate</span>
+          <h4>Generoi uusi paketti</h4>
         </div>
-        <p>Tämä on tuotteen päätoiminto.</p>
+        <p>Päivitä sivu, blogit ja SEO samalla napilla.</p>
       </div>
 
-      <p class="body-copy stage-inline-note">
-        Lumix luo samalla strategian, landing-sivun, 3 blogia ja SEO-paketin.
-      </p>
-
-      <div class="stage-actions">
-        <button type="button" data-action="generate" data-guide="generate">Generoi kaikki</button>
+      <div class="stage-actions stage-actions-inline">
+        <button type="button" data-action="generate" data-guide="generate">Generoi sisältö</button>
+        <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa sivu</a>
       </div>
 
       <div class="flow-strip compact-stat-strip">
@@ -1084,6 +1153,14 @@ function renderGenerateStage(client) {
         <span class="flow-pill">Blogit ${client.blogs.length}</span>
         <span class="flow-pill">SEO ${client.seo ? "valmis" : "kesken"}</span>
       </div>
+
+      <p class="body-copy generate-stage-note">
+        ${
+          client.lastGenerationAt
+            ? `Viimeisin generointi ${formatDate(client.lastGenerationAt)}.`
+            : "Tähän syntyy ensimmäinen valmis sisältöpaketti generoinnin jälkeen."
+        }
+      </p>
     </div>
   `;
 }
@@ -1091,80 +1168,50 @@ function renderGenerateStage(client) {
 function renderPreviewStage(client) {
   if (!hasContent(client)) {
     return `
-      <div class="stage-card stage-card-locked">
+      <div class="stage-card stage-card-locked preview-stage-card">
         <div class="section-head">
           <div>
-            <span class="section-kicker">Vaihe 4</span>
-            <h4>Esikatsele sisältö</h4>
+            <span class="section-kicker">Preview</span>
+            <h4>Esikatselu odottaa</h4>
           </div>
-          <p>Odottaa generointia.</p>
+          <p>Ei sisältöä vielä.</p>
         </div>
-        <p class="body-copy">Kun painat Generoi kaikki, valmis sivu, blogit ja SEO näkyvät tässä.</p>
+        <p class="body-copy">
+          ${client.strategyRecommendation ? "Generoi ensin sisältö, niin preview aukeaa tähän suoraan." : "Tee ensin strategia ja generoi sitten sisältö."}
+        </p>
       </div>
     `;
   }
 
-  const visibleBlogs = client.blogs.slice(0, 3);
-  const recommendation = client.strategyRecommendation;
+  const visibleBlogs = client.blogs.slice(0, 2);
 
   return `
-    <div class="stage-card" data-guide="preview">
+    <div class="stage-card preview-stage-card">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Vaihe 4</span>
-          <h4>Esikatsele sisältö</h4>
+          <span class="section-kicker">Preview</span>
+          <h4>Näe mitä asiakkaalle syntyi</h4>
         </div>
-        <p>Tarkista ennen julkaisua.</p>
+        <p>Landing page, blogit ja SEO samassa kortissa.</p>
       </div>
 
-      <div class="stage-actions">
-        <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa valmis sivu</a>
-      </div>
-
-      ${
-        recommendation
-          ? `
-            <details class="stage-subdetails">
-              <summary>Näytä Lumixin suunta</summary>
-              <div class="strategy-list">
-                <div class="seo-item">
-                  <span>Positioning</span>
-                  <strong>${escapeHtml(recommendation.positioning || "")}</strong>
-                </div>
-                <div class="seo-item">
-                  <span>Pääpalvelu</span>
-                  <strong>${escapeHtml(recommendation.primaryOffer || "")}</strong>
-                </div>
-                <div class="seo-item">
-                  <span>CTA</span>
-                  <strong>${escapeHtml(recommendation.ctaStrategy || "")}</strong>
-                </div>
-              </div>
-            </details>
-          `
-          : ""
-      }
-
-      <details class="stage-subdetails" open>
-        <summary>Näytä landing-sivu</summary>
+      <div class="preview-main-panel">
+        <span class="section-kicker">Landing page</span>
         <div class="site-frame stage-preview-frame">
           <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
         </div>
-      </details>
+      </div>
 
-      <details class="stage-subdetails">
-        <summary>Näytä blogit</summary>
-        <div class="blog-frame stage-preview-frame">
+      <div class="preview-support-grid">
+        <div class="preview-support-panel">
+          <span class="section-kicker">Blogit</span>
           <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
         </div>
-      </details>
-
-      <details class="stage-subdetails">
-        <summary>Näytä SEO</summary>
-        <div class="seo-frame stage-preview-frame">
+        <div class="preview-support-panel">
+          <span class="section-kicker">SEO</span>
           ${renderSeo(client.seo)}
         </div>
-      </details>
+      </div>
     </div>
   `;
 }
@@ -1432,27 +1479,27 @@ function renderClientExtras(client) {
 
 function renderEmptyWorkspace() {
   activeClientView.innerHTML = `
-    <article class="panel workflow-empty">
+    <article class="panel workflow-empty dashboard-empty-card">
       <div class="panel-head">
         <div>
-          <span class="section-kicker">Aloita tästä</span>
-          <h2>Luo ensimmäinen asiakas</h2>
+          <span class="section-kicker">Lumix workspace</span>
+          <h2>Create your first client</h2>
         </div>
-        <p>Tähän avautuu yksi selkeä flow: tiedot, suunta, sisältö, julkaisu ja liidit.</p>
+        <p>When you add a client, this area becomes a focused review space for strategy, content and SEO.</p>
       </div>
 
       <div class="flow-strip">
-        <span class="flow-pill">1. Lisää asiakas</span>
-        <span class="flow-pill">2. Täytä intake</span>
-        <span class="flow-pill">3. Generoi kaikki</span>
-        <span class="flow-pill">4. Esikatsele sisältö</span>
-        <span class="flow-pill">5. Julkaise</span>
+        <span class="flow-pill">1. Client brief</span>
+        <span class="flow-pill">2. Strategy</span>
+        <span class="flow-pill">3. Generate</span>
+        <span class="flow-pill">4. Preview</span>
+        <span class="flow-pill">5. Publish</span>
       </div>
 
-      <div class="next-step-card">
+      <div class="next-step-card dashboard-empty-note">
         <span class="section-kicker">Lumix</span>
-        <strong>Lumix ei ole erillinen chat. Se ohjaa tätä flow’ta vaihe vaiheelta.</strong>
-        <div class="stage-actions">
+        <strong>Lumix turns the dashboard into one review flow instead of many disconnected admin panels.</strong>
+        <div class="stage-actions stage-actions-inline">
           <button type="button" class="ghost-button" data-empty-action="lumix">Käynnistä Lumix</button>
         </div>
       </div>
@@ -1465,11 +1512,21 @@ function renderClientSelector(clients) {
 
   if (!clients.length) {
     clientsList.innerHTML = '<article class="mini-card"><p>Ei asiakkaita vielä.</p></article>';
+    activeClientSelect.innerHTML = '<option value="">No clients yet</option>';
+    activeClientSelect.disabled = true;
     renderEmptyWorkspace();
     return;
   }
 
   const activeId = state.activeClientId;
+  activeClientSelect.disabled = false;
+  activeClientSelect.innerHTML = clients
+    .map(
+      (client) => `
+        <option value="${client.id}"${client.id === activeId ? " selected" : ""}>${escapeHtml(client.businessName)}</option>
+      `
+    )
+    .join("");
 
   clientsList.innerHTML = clients
     .map(
@@ -1503,44 +1560,291 @@ function renderClientSelector(clients) {
     .join("");
 }
 
+function getStatusHeroContent(client) {
+  if (!hasProfile(client)) {
+    return {
+      eyebrow: "Client setup",
+      title: "Client profile is still missing the basics.",
+      text: "Fill the client brief first so Lumix can turn it into a usable strategy and content direction.",
+      action: {
+        label: "Open client brief",
+        className: "ghost-button",
+        guide: "intake",
+        action: null
+      }
+    };
+  }
+
+  if (!client.strategyRecommendation) {
+    return {
+      eyebrow: "Lumix status",
+      title: "Client ready. Next step: create the strategy.",
+      text: "Lumix can now generate positioning, offer framing and content angles for this client.",
+      action: {
+        label: "Build strategy",
+        className: "dashboard-cta-button",
+        guide: "recommend",
+        action: "recommend"
+      }
+    };
+  }
+
+  if (!hasContent(client)) {
+    return {
+      eyebrow: "Lumix status",
+      title: "Strategy ready. Next step: generate your content.",
+      text: "The positioning and content direction are ready. Generate the landing page, blogs and SEO package from the same flow.",
+      action: {
+        label: "Generate everything",
+        className: "dashboard-cta-button",
+        guide: "generate",
+        action: "generate"
+      }
+    };
+  }
+
+  if (!client.publishHistory.length) {
+    return {
+      eyebrow: "Lumix status",
+      title: "Content ready. Next step: review and publish.",
+      text: "Landing page, blog content and SEO direction are ready for review. Publish when the package looks good.",
+      action: {
+        label: client.publishTargets.length ? "Publish now" : "Content ready",
+        className: client.publishTargets.length ? "dashboard-cta-button" : "ghost-button",
+        guide: client.publishTargets.length ? "publish" : "publish-settings",
+        action: client.publishTargets.length ? "publish-all" : null
+      }
+    };
+  }
+
+  return {
+    eyebrow: "Lumix status",
+    title: "Published. Next step: track leads and iterate.",
+    text: "The first package is live. Review leads, refresh content and continue improving the account from the same workspace.",
+    action: {
+      label: "Generate another round",
+      className: "dashboard-cta-button",
+      guide: "generate",
+      action: "generate"
+    }
+  };
+}
+
+function renderPreviewPanel(client) {
+  const activeTab = getActivePreviewTab(client);
+  const tabs = getPreviewTabs(client);
+  const activeBlogIndex = activeTab.startsWith("blog-") ? Number(activeTab.split("-")[1]) : -1;
+  const activeBlog = activeBlogIndex >= 0 ? client.blogs[activeBlogIndex] : null;
+
+  let previewContent = "";
+  if (activeTab === "landing") {
+    previewContent = `
+      <div class="preview-window preview-window-landing">
+        <div class="tag">Website preview</div>
+        <h3>${escapeHtml(client.website?.headline || client.businessName)}</h3>
+        <p>${escapeHtml(client.website?.subheadline || client.description)}</p>
+        <div class="preview-actions">
+          <button class="dashboard-cta-button" type="button">${escapeHtml(client.website?.cta || "Get in touch")}</button>
+          <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Open public page</a>
+        </div>
+      </div>
+    `;
+  } else if (activeTab === "seo") {
+    previewContent = `
+      <div class="preview-window preview-window-article">
+        <div class="tag">SEO preview</div>
+        <h3>${escapeHtml(client.seo?.title || `${client.businessName} SEO package`)}</h3>
+        <p>${escapeHtml(client.seo?.metaDescription || "SEO metadata appears here after generation.")}</p>
+        <div class="preview-meta-stack">
+          <div class="preview-meta-item">
+            <span>Slug</span>
+            <strong>/${escapeHtml(client.seo?.slug || client.businessName.toLowerCase().replaceAll(/\s+/g, "-"))}</strong>
+          </div>
+          <div class="preview-meta-item">
+            <span>Keywords</span>
+            <strong>${escapeHtml(ensureArray(client.seo?.keywords).join(", ") || "No keywords yet")}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    previewContent = `
+      <div class="preview-window preview-window-article">
+        <div class="tag">Blog preview</div>
+        <h3>${escapeHtml(activeBlog?.title || "Blog draft")}</h3>
+        <p>${escapeHtml(activeBlog?.excerpt || stripHtmlPreview(activeBlog?.html) || "Blog preview appears here after generation.")}</p>
+        <div class="preview-meta-stack">
+          <div class="preview-meta-item">
+            <span>Keyword</span>
+            <strong>${escapeHtml(activeBlog?.keyword || "No keyword yet")}</strong>
+          </div>
+          <div class="preview-meta-item">
+            <span>Status</span>
+            <strong>Draft preview</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <section class="card dashboard-preview-card">
+      <div class="tabs dashboard-preview-tabs">
+        ${tabs
+          .map(
+            (tab) => `
+              <button type="button" class="tab${tab.id === activeTab ? " active" : ""}" data-preview-tab="${tab.id}">
+                ${escapeHtml(tab.label)}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="preview">
+        ${previewContent}
+      </div>
+    </section>
+  `;
+}
+
+function renderClientSummaryCard(client) {
+  const profile = client.businessProfile || {};
+  return `
+    <section class="card side-card dashboard-side-card">
+      <div class="eyebrow">Client</div>
+      <h4>${escapeHtml(client.businessName)}</h4>
+      <div class="summary-list">
+        <div><strong>Plan:</strong> ${escapeHtml(client.plan)}</div>
+        <div><strong>Audience:</strong> ${escapeHtml(profile.audienceType || "Not defined yet")}</div>
+        <div><strong>CTA:</strong> ${escapeHtml(profile.mainCta || client.website?.cta || "Not defined yet")}</div>
+        <div><strong>Market:</strong> ${escapeHtml(profile.geoFocus || "Not defined yet")}</div>
+      </div>
+    </section>
+  `;
+}
+
+function renderStrategySummaryCard(client) {
+  const recommendation = client.strategyRecommendation;
+  if (!recommendation) {
+    return `
+      <section class="card side-card dashboard-side-card">
+        <div class="eyebrow">Strategy summary</div>
+        <h4>Waiting for Lumix</h4>
+        <p class="muted">Build the strategy first to populate audience, offer and content direction here.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="card side-card dashboard-side-card">
+      <div class="eyebrow">Strategy summary</div>
+      <h4>What Lumix built</h4>
+      <div class="summary-list">
+        <div><strong>Audience:</strong> ${escapeHtml(recommendation.primaryAudience)}</div>
+        <div><strong>Positioning:</strong> ${escapeHtml(recommendation.positioning)}</div>
+        <div><strong>Offer:</strong> ${escapeHtml(recommendation.primaryOffer)}</div>
+        <div><strong>Channels:</strong> ${escapeHtml(["Landing page", "Blog", "SEO"].join(", "))}</div>
+      </div>
+    </section>
+  `;
+}
+
+function renderPerformanceCard(client) {
+  return `
+    <section class="card side-card dashboard-side-card">
+      <div class="eyebrow">Performance</div>
+      <h4>Quick overview</h4>
+      <div class="metric">
+        <span>Page views</span>
+        <strong>${client.analytics.pageViews}</strong>
+      </div>
+      <div class="metric">
+        <span>CTA clicks</span>
+        <strong>${client.analytics.ctaClicks}</strong>
+      </div>
+      <div class="metric">
+        <span>Leads</span>
+        <strong>${client.analytics.leadSubmits}</strong>
+      </div>
+    </section>
+  `;
+}
+
+function renderPublishCard(client) {
+  const canPublish = hasContent(client) && client.publishTargets.length;
+  return `
+    <section class="card side-card dashboard-side-card">
+      <div class="eyebrow">Publish</div>
+      <h4>${canPublish ? "Ready to go live" : "Prepare publishing"}</h4>
+      <div class="publish-box">
+        <p class="muted">
+          ${
+            canPublish
+              ? "Your content is ready for review. Publish when the landing page, blogs and SEO setup look good."
+              : client.publishTargets.length
+                ? "Generate the content first. Then you can publish it directly from here."
+                : "Add at least one publish target in the settings panel before going live."
+          }
+        </p>
+        ${
+          canPublish
+            ? `<button type="button" class="dashboard-cta-button" data-action="publish-all">Publish now</button>`
+            : client.publishTargets.length
+              ? `<button type="button" class="ghost-button" data-action="generate">Generate first</button>`
+              : `<div class="dashboard-inline-note">Add a publish target from the settings below.</div>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderStatusHero(client) {
+  const hero = getStatusHeroContent(client);
+
+  return `
+    <section class="card status-card dashboard-status-card">
+      <div>
+        <div class="eyebrow">${escapeHtml(hero.eyebrow)}</div>
+        <h2>${escapeHtml(hero.title)}</h2>
+        <p>${escapeHtml(hero.text)}</p>
+      </div>
+      <div>
+        ${
+          hero.action.action
+            ? `<button type="button" class="${hero.action.className}" data-action="${hero.action.action}"${hero.action.guide ? ` data-guide="${hero.action.guide}"` : ""}>${escapeHtml(hero.action.label)}</button>`
+            : `<button type="button" class="${hero.action.className}"${hero.action.guide ? ` data-guide="${hero.action.guide}"` : ""}>${escapeHtml(hero.action.label)}</button>`
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderActiveClient(client) {
-  const nextStep = getNextStep(client);
-
   activeClientView.innerHTML = `
-    <article class="panel workflow-card" data-client-id="${client.id}">
-      <div class="workflow-header">
+    <article class="dashboard-active-workspace" data-client-id="${client.id}">
+      ${renderStatusHero(client)}
+
+      <div class="layout dashboard-active-layout">
         <div>
-          <span class="section-kicker">Aktiivinen asiakas</span>
-          <h2>${escapeHtml(client.businessName)}</h2>
-          <p class="body-copy">${escapeHtml(client.description)}</p>
+          <div class="column dashboard-preview-column">
+            ${renderPreviewPanel(client)}
+          </div>
         </div>
-        <div class="workflow-header-meta">
-          <span class="client-status">${escapeHtml(client.billingStatus)}</span>
-        </div>
+
+        <aside class="right-column dashboard-active-side">
+          ${renderClientSummaryCard(client)}
+          ${renderStrategySummaryCard(client)}
+          ${renderPerformanceCard(client)}
+          ${renderPublishCard(client)}
+        </aside>
       </div>
 
-      <div class="primary-flow-strip">
-        <span class="flow-pill">1. Lisää asiakas</span>
-        <span class="flow-pill">2. Täytä intake</span>
-        <span class="flow-pill">3. Generoi kaikki</span>
-        <span class="flow-pill">4. Esikatsele sisältö</span>
-        <span class="flow-pill">5. Julkaise</span>
-      </div>
-
-      <div class="next-step-card">
-        <span class="section-kicker">${escapeHtml(nextStep.title)}</span>
-        <strong>${escapeHtml(nextStep.text)}</strong>
-      </div>
-
-      <div class="workflow-stage-stack">
+      <div class="dashboard-bottom-panels">
         ${renderIntake(client)}
-        ${renderGenerateStage(client)}
-        ${renderPreviewStage(client)}
-        ${renderPublishStage(client)}
+        ${renderClientExtras(client)}
       </div>
     </article>
-
-    ${renderClientExtras(client)}
   `;
 }
 
@@ -1559,6 +1863,9 @@ function render() {
   renderLumixPanel();
 
   agencyTitle.textContent = `${state.bootstrap.user.agencyName}`;
+  agencySubtitle.textContent = activeClientSelect.disabled
+    ? "Build your website, content and SEO in one clear flow."
+    : "Build your website, content and SEO in one clear flow.";
   document.getElementById("team-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
   document.getElementById("report-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
   document.getElementById("send-report-button").classList.toggle("hidden", state.bootstrap.user.role === "member");
@@ -1567,9 +1874,14 @@ function render() {
 
   const activeClient = getActiveClient();
   if (activeClient) {
+    agencySubtitle.textContent = `${activeClient.businessName} in review. Build your website, content and SEO in one clear flow.`;
     renderActiveClient(activeClient);
+    primaryGenerateButton.disabled = false;
+    primaryGenerateButton.textContent = hasContent(activeClient) ? "Generate another round" : "Generate everything";
   } else {
     renderEmptyWorkspace();
+    primaryGenerateButton.disabled = true;
+    primaryGenerateButton.textContent = "Generate everything";
   }
 
   if (!state.tourInitialized) {
@@ -1712,6 +2024,25 @@ clientsList.addEventListener("click", (event) => {
   render();
 });
 
+activeClientSelect.addEventListener("change", (event) => {
+  state.activeClientId = Number(event.currentTarget.value);
+  render();
+});
+
+primaryGenerateButton.addEventListener("click", async () => {
+  const client = getActiveClient();
+  if (!client) return;
+
+  await runAction(`Generoidaan asiakkaalle ${client.businessName}...`, async () => {
+    const result = await api(`/api/clients/${client.id}/generate`, { method: "POST" });
+    if (result.lumixAction) {
+      lumixActionState.set(client.id, result.lumixAction);
+    }
+    setStatus(`Generointi lisätty jonoon (#${result.job.id}).`);
+    await refresh();
+  });
+});
+
 activeClientView.addEventListener("submit", async (event) => {
   const intakeForm = event.target.closest("form[data-intake-form]");
   if (intakeForm) {
@@ -1758,6 +2089,21 @@ activeClientView.addEventListener("click", async (event) => {
   const emptyActionButton = event.target.closest("button[data-empty-action='lumix']");
   if (emptyActionButton) {
     activateLumix();
+    return;
+  }
+
+  const guideOnlyButton = event.target.closest("button[data-guide]:not([data-action])");
+  if (guideOnlyButton) {
+    highlightGuideTarget(`[data-guide='${guideOnlyButton.dataset.guide}']`);
+    return;
+  }
+
+  const previewTabButton = event.target.closest("button[data-preview-tab]");
+  if (previewTabButton) {
+    const client = getActiveClient();
+    if (!client) return;
+    previewTabState.set(client.id, previewTabButton.dataset.previewTab);
+    render();
     return;
   }
 

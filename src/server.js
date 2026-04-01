@@ -15,6 +15,18 @@ import { createQueueService } from "./queue.js";
 import { createReportService } from "./reports.js";
 import { createScheduler } from "./scheduler.js";
 import {
+  createRateLimitMiddleware,
+  createSecurityHeadersMiddleware,
+  createTrustedOriginMiddleware,
+  getClientIp,
+  getSecurityConfig,
+  getTrustedOrigins,
+  isPlainObject,
+  isValidEmail,
+  limitString,
+  parseEntityId
+} from "./security.js";
+import {
   buildLumixContext,
   buildLumixRuntime,
   getLumixAgent,
@@ -38,8 +50,11 @@ const agency = createAgencyService();
 const billing = createBillingService(database, appUrl);
 const publisher = createPublishService(database);
 const reports = createReportService(database);
+const trustedOrigins = getTrustedOrigins(appUrl);
+const securityConfig = getSecurityConfig();
 
 const app = express();
+app.disable("x-powered-by");
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   try {
@@ -55,7 +70,66 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+app.use(createSecurityHeadersMiddleware({ appUrl }));
 app.use(express.static(publicDir, { index: false }));
+
+const requireTrustedOrigin = createTrustedOriginMiddleware({ trustedOrigins });
+const authRateLimit = createRateLimitMiddleware({
+  windowMs: securityConfig.authWindowMs,
+  max: securityConfig.authMax,
+  keyGenerator: (req) => `${getClientIp(req)}:${limitString(req.body?.email, 254)}:${req.path}`,
+  message: "Too many authentication attempts. Try again later."
+});
+const publicTrackRateLimit = createRateLimitMiddleware({
+  windowMs: securityConfig.publicTrackWindowMs,
+  max: securityConfig.publicTrackMax,
+  keyGenerator: (req) => `${getClientIp(req)}:track:${req.params.id}`,
+  message: "Tracking rate limit reached."
+});
+const publicLeadRateLimit = createRateLimitMiddleware({
+  windowMs: securityConfig.publicLeadWindowMs,
+  max: securityConfig.publicLeadMax,
+  keyGenerator: (req) => `${getClientIp(req)}:lead:${req.params.id}`,
+  message: "Lead form rate limit reached."
+});
+
+app.use("/api", (req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return next();
+  }
+
+  if (req.path === "/stripe/webhook" || req.path.startsWith("/public/")) {
+    return next();
+  }
+
+  return requireTrustedOrigin(req, res, next);
+});
+
+function readEntityIdOrFail(req, res, name = "id") {
+  const parsedId = parseEntityId(req.params[name]);
+  if (!parsedId) {
+    res.status(400).json({ error: `Invalid ${name}.` });
+    return null;
+  }
+  return parsedId;
+}
+
+function readMetadata(input, maxLength = 2000) {
+  if (input == null) {
+    return {};
+  }
+
+  if (!isPlainObject(input)) {
+    throw new Error("metadata must be an object.");
+  }
+
+  const serialized = JSON.stringify(input);
+  if (serialized.length > maxLength) {
+    throw new Error("metadata is too large.");
+  }
+
+  return input;
+}
 
 function requireAuth(req, res) {
   const user = auth.getUserFromRequest(req);
@@ -187,8 +261,7 @@ app.get("/api/health", (_req, res) => {
     stripeConfigured: billing.configured,
     schedulerIntervalMs: scheduler.intervalMs,
     queueIntervalMs: queue.intervalMs,
-    queueConcurrency: queue.concurrency,
-    databasePath: database.dbPath
+    queueConcurrency: queue.concurrency
   });
 });
 
@@ -240,7 +313,7 @@ app.get("/api/lumix", (_req, res) => {
   });
 });
 
-app.post("/api/auth/register", (req, res) => {
+app.post("/api/auth/register", authRateLimit, (req, res) => {
   try {
     const result = auth.register(req.body || {});
     res.setHeader("Set-Cookie", auth.buildSessionCookie(result.session.token));
@@ -250,7 +323,7 @@ app.post("/api/auth/register", (req, res) => {
   }
 });
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", authRateLimit, (req, res) => {
   try {
     const result = auth.login(req.body || {});
     res.setHeader("Set-Cookie", auth.buildSessionCookie(result.session.token));
@@ -305,13 +378,15 @@ app.post("/api/team-members", (req, res) => {
 app.patch("/api/team-members/:id", (req, res) => {
   const user = requireAuth(req, res);
   if (!user || !requireRole(user, res, ["owner"])) return;
+  const memberId = readEntityIdOrFail(req, res);
+  if (!memberId) return;
 
   const role = String(req.body.role || "");
   if (!["admin", "member"].includes(role)) {
     return res.status(400).json({ error: "Role must be admin or member." });
   }
 
-  const member = database.updateAgencyMemberRole(user.agencyId, Number(req.params.id), role);
+  const member = database.updateAgencyMemberRole(user.agencyId, memberId, role);
   if (!member) return res.status(404).json({ error: "Member not found." });
   res.json({ member });
 });
@@ -322,7 +397,7 @@ app.post("/api/clients", (req, res) => {
 
   const businessName = String(req.body.businessName || "").trim();
   const description = String(req.body.description || "").trim();
-  const customPrompt = String(req.body.customPrompt || "").trim();
+  const customPrompt = limitString(req.body.customPrompt, 4000);
   const plan = String(req.body.plan || "starter").trim();
   const generationIntervalDays = Number(req.body.generationIntervalDays || 30);
   const autoGenerate = req.body.autoGenerate !== false;
@@ -330,6 +405,14 @@ app.post("/api/clients", (req, res) => {
 
   if (!businessName || !description) {
     return res.status(400).json({ error: "businessName and description are required." });
+  }
+
+  if (businessName.length > 120 || description.length > 3000 || !["starter", "growth", "scale"].includes(plan)) {
+    return res.status(400).json({ error: "Invalid client payload." });
+  }
+
+  if (![7, 14, 30].includes(generationIntervalDays)) {
+    return res.status(400).json({ error: "generationIntervalDays must be 7, 14 or 30." });
   }
 
   const client = database.createClient(user.agencyId, user.id, {
@@ -362,7 +445,9 @@ app.post("/api/clients", (req, res) => {
 app.get("/api/clients/:id", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const client = database.getClientById(user.agencyId, Number(req.params.id));
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
   res.json({ client: hydrateLumixClient(client) });
 });
@@ -371,7 +456,8 @@ app.put("/api/clients/:id/intake", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const clientId = Number(req.params.id);
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
@@ -385,7 +471,7 @@ app.put("/api/clients/:id/intake", (req, res) => {
     pricePosition: String(req.body.pricePosition || "").trim(),
     mainCta: String(req.body.mainCta || "").trim(),
     rawNotes: {
-      notes: String(req.body.notes || "").trim()
+      notes: limitString(req.body.notes, 4000)
     }
   });
 
@@ -411,7 +497,8 @@ app.post("/api/clients/:id/recommendation", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const clientId = Number(req.params.id);
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
@@ -449,11 +536,12 @@ app.post("/api/clients/:id/lumix-assist", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const clientId = Number(req.params.id);
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
-  const message = String(req.body.message || "").trim();
+  const message = limitString(req.body.message, 2000);
   if (!message) {
     return res.status(400).json({ error: "Message is required." });
   }
@@ -478,11 +566,17 @@ app.post("/api/clients/:id/lumix-assist", async (req, res) => {
 app.patch("/api/clients/:id", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
 
-  const client = database.updateClient(user.agencyId, Number(req.params.id), {
+  if (req.body.plan && !["starter", "growth", "scale"].includes(String(req.body.plan).trim())) {
+    return res.status(400).json({ error: "Invalid plan." });
+  }
+
+  const client = database.updateClient(user.agencyId, clientId, {
     businessName: req.body.businessName ? String(req.body.businessName).trim() : undefined,
     description: req.body.description ? String(req.body.description).trim() : undefined,
-    customPrompt: req.body.customPrompt !== undefined ? String(req.body.customPrompt).trim() : undefined,
+    customPrompt: req.body.customPrompt !== undefined ? limitString(req.body.customPrompt, 4000) : undefined,
     plan: req.body.plan ? String(req.body.plan).trim() : undefined,
     status: req.body.status ? String(req.body.status).trim() : undefined,
     billingStatus: req.body.billingStatus ? String(req.body.billingStatus).trim() : undefined,
@@ -499,7 +593,9 @@ app.patch("/api/clients/:id", (req, res) => {
 app.post("/api/clients/:id/generate", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const client = database.getClientById(user.agencyId, Number(req.params.id));
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
   const actionResult = runLumixAction("generate_pack", {
@@ -603,14 +699,21 @@ app.post("/api/clients/:id/generate-all", async (req, res) => {
 app.post("/api/clients/:id/checkout", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const client = database.getClientById(user.agencyId, Number(req.params.id));
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
+
+  const requestedPlan = req.body.plan ? String(req.body.plan).trim() : client.plan;
+  if (!["starter", "growth", "scale"].includes(requestedPlan)) {
+    return res.status(400).json({ error: "Invalid plan." });
+  }
 
   try {
     const checkout = await billing.createCheckoutSession({
       client,
       userEmail: user.email,
-      requestedPlan: req.body.plan ? String(req.body.plan) : client.plan
+      requestedPlan
     });
     res.json({ checkout });
   } catch (error) {
@@ -621,10 +724,21 @@ app.post("/api/clients/:id/checkout", async (req, res) => {
 app.post("/api/clients/:id/publish-targets", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
 
-  const target = database.createPublishTarget(user.agencyId, Number(req.params.id), {
-    platform: String(req.body.platform || "").trim(),
-    name: String(req.body.name || "").trim(),
+  if (!isPlainObject(req.body.config || {})) {
+    return res.status(400).json({ error: "config must be an object." });
+  }
+
+  const platform = String(req.body.platform || "").trim();
+  if (!["wordpress", "webflow"].includes(platform)) {
+    return res.status(400).json({ error: "Unsupported publish platform." });
+  }
+
+  const target = database.createPublishTarget(user.agencyId, clientId, {
+    platform,
+    name: limitString(req.body.name, 120),
     autoPublish: Boolean(req.body.autoPublish),
     status: "active",
     config: req.body.config || {}
@@ -637,10 +751,21 @@ app.post("/api/clients/:id/publish-targets", (req, res) => {
 app.patch("/api/clients/:id/publish-targets/:targetId", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
+  const clientId = readEntityIdOrFail(req, res);
+  const targetId = readEntityIdOrFail(req, res, "targetId");
+  if (!clientId || !targetId) return;
 
-  const target = database.updatePublishTarget(user.agencyId, Number(req.params.id), Number(req.params.targetId), {
+  if (req.body.config !== undefined && !isPlainObject(req.body.config)) {
+    return res.status(400).json({ error: "config must be an object." });
+  }
+
+  if (req.body.platform && !["wordpress", "webflow"].includes(String(req.body.platform).trim())) {
+    return res.status(400).json({ error: "Unsupported publish platform." });
+  }
+
+  const target = database.updatePublishTarget(user.agencyId, clientId, targetId, {
     platform: req.body.platform ? String(req.body.platform).trim() : undefined,
-    name: req.body.name ? String(req.body.name).trim() : undefined,
+    name: req.body.name ? limitString(req.body.name, 120) : undefined,
     autoPublish: req.body.autoPublish !== undefined ? Boolean(req.body.autoPublish) : undefined,
     status: req.body.status ? String(req.body.status).trim() : undefined,
     config: req.body.config || undefined
@@ -653,10 +778,15 @@ app.patch("/api/clients/:id/publish-targets/:targetId", (req, res) => {
 app.post("/api/clients/:id/publish", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const client = database.getClientById(user.agencyId, Number(req.params.id));
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
-  const targetId = req.body.targetId ? Number(req.body.targetId) : null;
+  const targetId = req.body.targetId ? parseEntityId(req.body.targetId) : null;
+  if (req.body.targetId && !targetId) {
+    return res.status(400).json({ error: "Invalid targetId." });
+  }
   const actionResult = runLumixAction("publish_pack", {
     client,
     businessProfile: client.businessProfile,
@@ -705,13 +835,27 @@ app.put("/api/reports/settings", (req, res) => {
     .map((value) => value.trim())
     .filter(Boolean);
 
+  if (recipients.some((recipient) => !isValidEmail(recipient))) {
+    return res.status(400).json({ error: "Recipients must be valid email addresses." });
+  }
+
+  const smtpPort = Number(req.body.smtpPort || 587);
+  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+    return res.status(400).json({ error: "SMTP port must be between 1 and 65535." });
+  }
+
+  const fromEmail = String(req.body.fromEmail || "").trim();
+  if (fromEmail && !isValidEmail(fromEmail)) {
+    return res.status(400).json({ error: "fromEmail must be a valid email address." });
+  }
+
   const settings = database.upsertReportSettings(user.agencyId, {
-    smtpHost: String(req.body.smtpHost || "").trim(),
-    smtpPort: Number(req.body.smtpPort || 587),
+    smtpHost: limitString(req.body.smtpHost, 255),
+    smtpPort,
     smtpSecure: Boolean(req.body.smtpSecure),
-    smtpUser: String(req.body.smtpUser || "").trim(),
-    smtpPass: String(req.body.smtpPass || "").trim(),
-    fromEmail: String(req.body.fromEmail || "").trim(),
+    smtpUser: limitString(req.body.smtpUser, 255),
+    smtpPass: limitString(req.body.smtpPass, 255),
+    fromEmail,
     recipients
   });
 
@@ -739,7 +883,9 @@ app.post("/api/scheduler/run-now", (req, res) => {
 });
 
 app.get("/api/public/clients/:id", (req, res) => {
-  const clientRow = database.getClientRecordByAnyId(Number(req.params.id));
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow || clientRow.status !== "active") {
     return res.status(404).json({ error: "Client page not found." });
   }
@@ -756,8 +902,10 @@ app.get("/api/public/clients/:id", (req, res) => {
   });
 });
 
-app.post("/api/public/clients/:id/track", (req, res) => {
-  const clientRow = database.getClientRecordByAnyId(Number(req.params.id));
+app.post("/api/public/clients/:id/track", publicTrackRateLimit, (req, res) => {
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow || clientRow.status !== "active") {
     return res.status(404).json({ error: "Client page not found." });
   }
@@ -767,11 +915,18 @@ app.post("/api/public/clients/:id/track", (req, res) => {
     return res.status(400).json({ error: "Unsupported event type." });
   }
 
+  let metadata;
+  try {
+    metadata = readMetadata(req.body.metadata, 2000);
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid metadata." });
+  }
+
   database.recordAnalyticsEvent(clientRow.id, {
-    sessionId: String(req.body.sessionId || "").trim() || null,
+    sessionId: limitString(req.body.sessionId, 120) || null,
     eventType,
-    referrer: String(req.body.referrer || "").trim() || null,
-    metadata: req.body.metadata || {}
+    referrer: limitString(req.body.referrer, 2048) || null,
+    metadata
   });
 
   res.json({
@@ -780,28 +935,34 @@ app.post("/api/public/clients/:id/track", (req, res) => {
   });
 });
 
-app.post("/api/public/clients/:id/lead", (req, res) => {
-  const clientRow = database.getClientRecordByAnyId(Number(req.params.id));
+app.post("/api/public/clients/:id/lead", publicLeadRateLimit, (req, res) => {
+  const clientId = readEntityIdOrFail(req, res);
+  if (!clientId) return;
+  const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow || clientRow.status !== "active") {
     return res.status(404).json({ error: "Client page not found." });
   }
 
   const email = String(req.body.email || "").trim();
-  const message = String(req.body.message || "").trim();
+  const message = limitString(req.body.message, 2000);
 
   if (!email || !message) {
     return res.status(400).json({ error: "email and message are required." });
   }
 
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Enter a valid email address." });
+  }
+
   const lead = database.createLead(clientRow.id, {
-    name: String(req.body.name || "").trim(),
+    name: limitString(req.body.name, 120),
     email,
     message,
-    source: String(req.body.source || "public_page")
+    source: limitString(req.body.source || "public_page", 120)
   });
 
   database.recordAnalyticsEvent(clientRow.id, {
-    sessionId: String(req.body.sessionId || "").trim() || null,
+    sessionId: limitString(req.body.sessionId, 120) || null,
     eventType: "lead_submit",
     referrer: null,
     metadata: {
