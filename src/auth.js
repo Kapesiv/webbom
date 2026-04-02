@@ -1,6 +1,7 @@
 import crypto from "crypto";
 
 const SESSION_COOKIE_NAME = "autonomous_agency_session";
+const isProduction = process.env.NODE_ENV === "production";
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -44,30 +45,29 @@ export function createAuthService(database) {
   const sessionTtlDays = Math.max(1, Number(process.env.SESSION_TTL_DAYS || 30));
   const sessionMaxAgeSeconds = sessionTtlDays * 24 * 60 * 60;
 
-  function buildSessionCookie(token) {
+  function buildCookieAttributes(token, maxAgeSeconds) {
     const attributes = [
       `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
       "Path=/",
       "HttpOnly",
       "SameSite=Lax",
-      `Max-Age=${sessionMaxAgeSeconds}`
+      "Priority=High",
+      `Max-Age=${maxAgeSeconds}`
     ];
 
-    if (process.env.NODE_ENV === "production") {
+    if (isProduction) {
       attributes.push("Secure");
     }
 
-    return attributes.join("; ");
+    return attributes;
+  }
+
+  function buildSessionCookie(token) {
+    return buildCookieAttributes(token, sessionMaxAgeSeconds).join("; ");
   }
 
   function buildClearSessionCookie() {
-    return [
-      `${SESSION_COOKIE_NAME}=`,
-      "Path=/",
-      "HttpOnly",
-      "SameSite=Lax",
-      "Max-Age=0"
-    ].join("; ");
+    return buildCookieAttributes("", 0).join("; ");
   }
 
   function createSessionForUser(userId) {
