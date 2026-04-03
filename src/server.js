@@ -267,10 +267,7 @@ Sitemap: ${siteUrl}/sitemap.xml
 app.get("/sitemap.xml", (_req, res) => {
   const now = new Date().toISOString();
   const urls = [
-    { loc: `${siteUrl}/`, priority: "1.0" },
-    { loc: `${siteUrl}/lumix`, priority: "0.9" },
-    { loc: `${siteUrl}/login`, priority: "0.4" },
-    { loc: `${siteUrl}/register`, priority: "0.4" }
+    { loc: `${siteUrl}/`, priority: "1.0" }
   ];
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -520,7 +517,7 @@ app.post("/api/clients/:id/lumix-assist", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Lumix assist failed."
+      error: error instanceof Error ? error.message : "EasyOnlinePresence assist failed."
     });
   }
 });
@@ -871,7 +868,7 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/lumix", (_req, res) => {
-  res.sendFile(path.join(publicDir, "lumix.html"));
+  res.redirect(301, "/");
 });
 
 app.get("/webbom", (_req, res) => {
@@ -890,14 +887,18 @@ app.get("/dashboard", (_req, res) => {
   res.sendFile(path.join(publicDir, "dashboard.html"));
 });
 
+app.get("/preview-large", (_req, res) => {
+  res.sendFile(path.join(publicDir, "preview-large.html"));
+});
+
 app.get("/app", (_req, res) => {
   res.redirect("/login");
 });
 
 app.get("*", (_req, res) => {
-  res.redirect("/lumix");
+  res.redirect("/");
 });
 
 app.listen(port, host, () => {
-  console.log(`Lumix running on ${appUrl}`);
+  console.log(`EasyOnlinePresence running on ${appUrl}`);
 });

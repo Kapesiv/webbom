@@ -4,27 +4,67 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Asiakassivu</title>
+    <meta name="robots" content="noindex, nofollow" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="public-shell">
-      <header class="public-topbar">
-        <a class="public-brand" href="/lumix">Lumix</a>
-        <span class="chip">Julkinen sivu</span>
+  <body class="public-dashboard-page">
+    <main class="public-shell public-dashboard-shell">
+      <header class="public-topbar public-dashboard-topbar">
+        <div class="public-dashboard-brand">
+          <a class="public-brand" href="/">EasyOnlinePresence</a>
+          <span class="public-dashboard-brand-copy">Client workspace preview</span>
+        </div>
+        <div class="public-dashboard-topbar-actions">
+          <span class="chip">Live preview</span>
+          <span class="chip">Julkinen sivu</span>
+        </div>
       </header>
 
-      <section class="public-hero">
-        <div class="public-hero-copy">
+      <section class="public-hero public-dashboard-head">
+        <div class="public-hero-copy public-dashboard-intro">
           <p class="eyebrow">Esittely</p>
           <h1 id="public-title">Ladataan asiakassivua...</h1>
           <p id="public-subtitle" class="lede"></p>
           <div id="public-meta" class="public-meta"></div>
         </div>
+        <div id="public-metrics" class="public-metric-grid"></div>
       </section>
 
-      <section class="public-layout">
-        <article class="panel public-content-card">
-          <div id="public-site" class="generated-site"></div>
+      <section class="public-layout public-dashboard-layout">
+        <aside class="public-dashboard-rail">
+          <section class="panel public-nav-card">
+            <div class="panel-head">
+              <h2>Page map</h2>
+              <p>Nopea rakenne yhdellä silmäyksellä.</p>
+            </div>
+            <div id="public-nav" class="public-nav-list"></div>
+          </section>
+
+          <section class="panel public-note-card public-seo-card">
+            <div class="panel-head">
+              <h2>SEO focus</h2>
+              <p>Pidetään asiakkaan oma data näkyvästi mukana.</p>
+            </div>
+            <div id="public-seo-summary" class="mini-list"></div>
+          </section>
+        </aside>
+
+        <article class="panel public-content-card public-preview-panel">
+          <div class="public-preview-chrome">
+            <div class="public-preview-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="public-preview-tabs">
+              <span class="public-preview-tab public-preview-tab-active">Landing page</span>
+              <span class="public-preview-tab">SEO</span>
+              <span class="public-preview-tab">Contact flow</span>
+            </div>
+          </div>
+          <div class="public-preview-canvas">
+            <div id="public-site" class="public-site-surface"></div>
+          </div>
         </article>
 
         <aside class="public-side public-side-stack">
@@ -52,17 +92,11 @@
           </section>
 
           <section class="panel public-note-card">
-            <h2>Mitä seuraavaksi</h2>
-            <div class="mini-list">
-              <article class="mini-card">
-                <strong>Yhteydenotto</strong>
-                <p>Kirjoita viesti, niin tiimi näkee sen heti.</p>
-              </article>
-              <article class="mini-card">
-                <strong>Selkeä polku</strong>
-                <p>Sivu ja viestit pysyvät samassa järjestelmässä.</p>
-              </article>
+            <div class="panel-head">
+              <h2>Output summary</h2>
+              <p>Referenssityyli, oma sisältö.</p>
             </div>
+            <div id="public-insights" class="mini-list"></div>
           </section>
         </aside>
       </section>

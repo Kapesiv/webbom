@@ -160,6 +160,34 @@ function parseJsonOutput(outputText) {
   return parseWithRepairs(text);
 }
 
+async function requestStructuredJson(client, { isOpenRouter, model, prompt, schemaName, schema, maxTokens }) {
+  if (isOpenRouter) {
+    const completion = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
+    });
+
+    return parseJsonOutput(completion.choices[0]?.message?.content || "");
+  }
+
+  const response = await client.responses.create({
+    model,
+    max_output_tokens: maxTokens,
+    input: prompt,
+    text: {
+      format: {
+        type: "json_schema",
+        name: schemaName,
+        strict: true,
+        schema
+      }
+    }
+  });
+
+  return parseJsonOutput(response.output_text);
+}
+
 export async function generateAndSaveStrategy(database, clientId) {
   const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow) {
@@ -189,33 +217,14 @@ export async function generateAndSaveStrategy(database, clientId) {
   } else {
     const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
     const prompt = buildStrategyPrompt(client, actionResult.recommendation);
-    const parsed = isOpenRouter
-      ? parseJsonOutput(
-        (
-          await openai.chat.completions.create({
-            model,
-            max_tokens: 400,
-            messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
-          })
-        ).choices[0]?.message?.content || ""
-      )
-      : parseJsonOutput(
-          (
-            await openai.responses.create({
-              model,
-              max_output_tokens: 400,
-              input: prompt,
-              text: {
-                format: {
-                  type: "json_schema",
-                  name: "lumix_strategy",
-                  strict: true,
-                  schema: strategySchema
-                }
-              }
-            })
-          ).output_text
-        );
+    const parsed = await requestStructuredJson(openai, {
+      isOpenRouter,
+      model,
+      prompt,
+      schemaName: "lumix_strategy",
+      schema: strategySchema,
+      maxTokens: 400
+    });
     strategy = validateStrategy({
       ...parsed,
       version: "v1",

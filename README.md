@@ -11,7 +11,7 @@ Paikallinen MVP AI-markkinointitoimistolle. Yksi dashboard hallitsee:
 - taustalla pyörivää job queuea generoinnille, publishille ja reporteille
 - public client -sivuja CTA- ja lead-trackingilla
 - Stripe checkoutin kuukausilaskutusta varten
-- Lumix-agentin ja ontologiapohjaisen intake + strategy -flow'n
+- EasyOnlinePresence-agentin ja ontologiapohjaisen intake + strategy -flow'n
 
 ## Stack
 
@@ -137,7 +137,7 @@ Webflow:
 ## Huomioita
 
 - Ilman `OPENAI_API_KEY`:ta generointi toimii demo-tilassa.
-- Lumix on ontologiapohjainen agentti, joka muuttaa briefin rakenteiseksi profiiliksi, suositukseksi ja generointikontekstiksi.
+- EasyOnlinePresence on ontologiapohjainen agentti, joka muuttaa briefin rakenteiseksi profiiliksi, suositukseksi ja generointikontekstiksi.
 - Ilman Stripe-avaimia checkout fallbackaa demo-tilaan mutta subscription-rakenne tallentuu silti.
 - SMTP-asetukset tallennetaan SQLiteen dashboardin kautta.
 - WordPress/Webflow publish on nyt sync-tyylinen vain niin pitkalle kuin ulkoinen item-id on tiedossa; tämä on selvästi parempi kuin aiempi create-always, mutta ei viela taydellinen CMS-synkro kaksisuuntaisille muutoksille.

@@ -27,6 +27,250 @@ function setStatusSuccess(message) {
   element.classList.add("is-success");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatMetric(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value ?? "");
+  return new Intl.NumberFormat("fi-FI").format(numeric);
+}
+
+function createSparkBars(values) {
+  return `
+    <div class="public-sparkbars" aria-hidden="true">
+      ${values
+        .map((value) => `<span style="height:${Math.max(24, value)}%"></span>`)
+        .join("")}
+    </div>
+  `;
+}
+
+function ensureGeneratedSite() {
+  const siteRoot = document.getElementById("public-site");
+  let wrapper = siteRoot.querySelector(".generated-site");
+
+  if (!wrapper) {
+    wrapper = document.createElement("div");
+    wrapper.className = "generated-site";
+    wrapper.innerHTML = siteRoot.innerHTML.trim()
+      ? `<section><p>${siteRoot.innerHTML}</p></section>`
+      : "<section><p>Landing page coming soon.</p></section>";
+    siteRoot.innerHTML = "";
+    siteRoot.append(wrapper);
+  }
+
+  return wrapper;
+}
+
+function getRenderedSections() {
+  return Array.from(ensureGeneratedSite().querySelectorAll(":scope > section"));
+}
+
+function decorateGeneratedSite(client) {
+  const wrapper = ensureGeneratedSite();
+  const sections = getRenderedSections();
+  const sectionMeta = [
+    { kicker: "Overview", kind: "hero" },
+    { kicker: "Offer", kind: "offer" },
+    { kicker: "Proof", kind: "proof" },
+    { kicker: "CTA", kind: "cta" }
+  ];
+
+  sections.forEach((section, index) => {
+    const meta = sectionMeta[index] || { kicker: `Section ${index + 1}`, kind: "detail" };
+    section.classList.add("public-site-section", `public-site-section-${meta.kind}`);
+
+    if (!section.querySelector(".public-section-kicker")) {
+      const kicker = document.createElement("span");
+      kicker.className = "public-section-kicker";
+      kicker.textContent = meta.kicker;
+      section.prepend(kicker);
+    }
+  });
+
+  const hero = sections[0];
+  if (hero && !hero.querySelector(".public-hero-grid")) {
+    const shell = document.createElement("div");
+    shell.className = "public-hero-grid";
+
+    const main = document.createElement("div");
+    main.className = "public-hero-main";
+
+    const side = document.createElement("aside");
+    side.className = "public-hero-side";
+    side.innerHTML = `
+      <article class="public-hero-side-card">
+        <span>Primary CTA</span>
+        <strong>${escapeHtml(client.website?.cta || "Ota yhteytta")}</strong>
+        <p>CTA toistuu hero-alueella ja loppublokissa.</p>
+      </article>
+      <article class="public-hero-side-card">
+        <span>SEO slug</span>
+        <strong>${escapeHtml(client.seo?.slug ? `/${client.seo.slug}` : "/coming-soon")}</strong>
+        <p>Osoite tulee suoraan asiakkaan omasta datasta.</p>
+      </article>
+      <article class="public-hero-side-card">
+        <span>Keyword count</span>
+        <strong>${escapeHtml(formatMetric(client.seo?.keywords?.length || 0))}</strong>
+        <p>${escapeHtml(client.seo?.keywords?.slice(0, 2).join(" • ") || "No keywords yet")}</p>
+      </article>
+    `;
+
+    while (hero.firstChild) {
+      main.append(hero.firstChild);
+    }
+
+    shell.append(main, side);
+    hero.append(shell);
+  }
+
+  const ctaSection = sections[sections.length - 1];
+  if (ctaSection && !ctaSection.querySelector(".public-cta-tail")) {
+    const tail = document.createElement("div");
+    tail.className = "public-cta-tail";
+    tail.innerHTML = `
+      <span class="public-cta-status">Ready to contact</span>
+      <span class="public-cta-status public-cta-status-muted">${escapeHtml(client.website?.cta || "Ota yhteytta")}</span>
+    `;
+    ctaSection.append(tail);
+  }
+}
+
+function renderMetricGrid(client) {
+  const cards = [
+    {
+      label: "Primary CTA",
+      value: client.website?.cta || "Ota yhteyttä",
+      meta: "Päätoiminto näkyy koko sivun läpi",
+      bars: [34, 58, 42, 76, 64, 88]
+    },
+    {
+      label: "SEO slug",
+      value: client.seo?.slug ? `/${client.seo.slug}` : "/coming-soon",
+      meta: "Osoite pysyy asiakkaan omassa datassa",
+      bars: [28, 42, 38, 52, 66, 74]
+    },
+    {
+      label: "Keyword pack",
+      value: formatMetric(client.seo?.keywords?.length || 0),
+      meta: client.seo?.keywords?.slice(0, 2).join(" • ") || "Hakusanat puuttuvat",
+      bars: [18, 36, 54, 46, 62, 78]
+    },
+    {
+      label: "Content blocks",
+      value: formatMetric(getRenderedSections().length || 0),
+      meta: "Rakenne visualisoitu dashboard-chromen sisään",
+      bars: [26, 48, 44, 60, 72, 90]
+    }
+  ];
+
+  document.getElementById("public-metrics").innerHTML = cards
+    .map(
+      (card) => `
+        <article class="public-metric-card">
+          <div class="public-metric-head">
+            <span>${escapeHtml(card.label)}</span>
+            <small>Live</small>
+          </div>
+          <strong>${escapeHtml(card.value)}</strong>
+          ${createSparkBars(card.bars)}
+          <p>${escapeHtml(card.meta)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderPageMap() {
+  const sections = getRenderedSections();
+  document.getElementById("public-nav").innerHTML = sections.length
+    ? sections
+        .map((section, index) => {
+          const heading = section.querySelector("h1, h2, h3");
+          const label = heading?.textContent?.trim() || `Section ${index + 1}`;
+          const badge = index === 0 ? "Hero" : `${index + 1}`;
+          return `
+            <article class="public-nav-item">
+              <span class="public-nav-index">${escapeHtml(badge)}</span>
+              <div>
+                <strong>${escapeHtml(label)}</strong>
+                <p>${escapeHtml(index === 0 ? "Primary conversion block" : "Supporting content block")}</p>
+              </div>
+            </article>
+          `;
+        })
+        .join("")
+    : `
+        <article class="mini-card">
+          <strong>Ei rakennetta vielä</strong>
+          <p>Generoi landing page, niin section map ilmestyy tähän.</p>
+        </article>
+      `;
+}
+
+function renderSeoSummary(client) {
+  const items = [
+    {
+      title: "Title",
+      text: client.seo?.title || client.businessName
+    },
+    {
+      title: "Meta description",
+      text: client.seo?.metaDescription || client.description
+    },
+    {
+      title: "Keywords",
+      text: client.seo?.keywords?.slice(0, 4).join(", ") || "Ei hakusanoja"
+    }
+  ];
+
+  document.getElementById("public-seo-summary").innerHTML = items
+    .map(
+      (item) => `
+        <article class="mini-card">
+          <strong>${escapeHtml(item.title)}</strong>
+          <p>${escapeHtml(item.text)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderInsights(client) {
+  const cards = [
+    {
+      title: "Reference style",
+      text: "Tumma analytics-dashboard chrome, mutta asiakkaan oma headline, CTA ja sisältö säilyvät."
+    },
+    {
+      title: "Primary CTA",
+      text: client.website?.cta || "Ota yhteyttä"
+    },
+    {
+      title: "Current lead path",
+      text: "Preview -> contact form -> lead submit"
+    }
+  ];
+
+  document.getElementById("public-insights").innerHTML = cards
+    .map(
+      (card) => `
+        <article class="mini-card">
+          <strong>${escapeHtml(card.title)}</strong>
+          <p>${escapeHtml(card.text)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function renderMetaChips(client) {
   const chips = [];
 
@@ -77,6 +321,11 @@ if (!bootstrap.client) {
   renderMetaChips(bootstrap.client);
   document.getElementById("public-site").innerHTML =
     bootstrap.client.website?.html || `<p>${bootstrap.client.description}</p>`;
+  decorateGeneratedSite(bootstrap.client);
+  renderMetricGrid(bootstrap.client);
+  renderPageMap();
+  renderSeoSummary(bootstrap.client);
+  renderInsights(bootstrap.client);
 
   await postJson(`/api/public/clients/${clientId}/track`, {
     eventType: "page_view",
