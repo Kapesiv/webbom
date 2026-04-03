@@ -125,6 +125,63 @@ function parseJsonOutput(outputText) {
   return parseWithRepairs(text);
 }
 
+function normalizeAssistPayload(parsed) {
+  if (typeof parsed?.reply === "string" && parsed.reply.trim()) {
+    return parsed;
+  }
+
+  const content = parsed?.content;
+  if (!content || typeof content !== "object") {
+    return parsed;
+  }
+
+  const parts = [content.headline, content.subheadline, content.body].filter(Boolean);
+  const ctaText =
+    typeof content.cta === "string"
+      ? content.cta
+      : typeof content.cta?.text === "string"
+        ? content.cta.text
+        : "";
+
+  if (ctaText) {
+    parts.push(`CTA: ${ctaText}`);
+  }
+
+  return {
+    ...parsed,
+    reply: parts.join("\n\n"),
+    suggestedUpdates: parsed.suggestedUpdates || {}
+  };
+}
+
+async function requestStructuredJson(client, { isOpenRouter, model, prompt, schemaName, schema, maxTokens }) {
+  if (isOpenRouter) {
+    const completion = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
+    });
+
+    return parseJsonOutput(completion.choices[0]?.message?.content || "");
+  }
+
+  const response = await client.responses.create({
+    model,
+    max_output_tokens: maxTokens,
+    input: prompt,
+    text: {
+      format: {
+        type: "json_schema",
+        name: schemaName,
+        strict: true,
+        schema
+      }
+    }
+  });
+
+  return parseJsonOutput(response.output_text);
+}
+
 function buildPrompt({ businessName, description, plan, customPrompt }) {
   const lines = [
     buildLumixPromptHeader(),
@@ -353,33 +410,14 @@ export function createAgencyService() {
     }
 
     const prompt = buildPrompt({ businessName, description, plan, customPrompt });
-    const parsed = isOpenRouter
-      ? parseJsonOutput(
-          (
-            await client.chat.completions.create({
-              model,
-              max_tokens: 400,
-              messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
-            })
-          ).choices[0]?.message?.content || ""
-        )
-      : parseJsonOutput(
-          (
-            await client.responses.create({
-              model,
-              max_output_tokens: 4000,
-              input: prompt,
-              text: {
-                format: {
-                  type: "json_schema",
-                  name: "agency_pack",
-                  strict: true,
-                  schema: generationSchema
-                }
-              }
-            })
-          ).output_text
-        );
+    const parsed = await requestStructuredJson(client, {
+      isOpenRouter,
+      model,
+      prompt,
+      schemaName: "agency_pack",
+      schema: generationSchema,
+      maxTokens: isOpenRouter ? 400 : 4000
+    });
 
     return {
       mode: "live",
@@ -419,33 +457,14 @@ export function createAgencyService() {
     }
 
     const prompt = buildLumixAssistPrompt({ client: currentClient, message });
-    const parsed = isOpenRouter
-      ? parseJsonOutput(
-          (
-            await client.chat.completions.create({
-              model,
-              max_tokens: 250,
-              messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
-            })
-          ).choices[0]?.message?.content || ""
-        )
-      : parseJsonOutput(
-          (
-            await client.responses.create({
-              model,
-              max_output_tokens: 250,
-              input: prompt,
-              text: {
-                format: {
-                  type: "json_schema",
-                  name: "lumix_assist",
-                  strict: true,
-                  schema: lumixAssistSchema
-                }
-              }
-            })
-          ).output_text
-        );
+    const parsed = normalizeAssistPayload(await requestStructuredJson(client, {
+      isOpenRouter,
+      model,
+      prompt,
+      schemaName: "lumix_assist",
+      schema: lumixAssistSchema,
+      maxTokens: 250
+    }));
     return {
       mode: "live",
       ...parsed
