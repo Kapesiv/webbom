@@ -3,94 +3,142 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard | EasyOnlinePresence</title>
-    <meta name="robots" content="noindex, nofollow" />
+    <title>Dashboard | Lumix</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="dashboard-body">
+  <body>
     <main class="page-shell page-shell-dashboard">
       <section class="dashboard-shell">
+        <aside class="dashboard-icon-rail" aria-label="Primary navigation">
+          <div class="dashboard-icon-rail-top">
+            <button
+              type="button"
+              class="icon-rail-button icon-rail-button-active"
+              data-rail-target="workspace"
+              aria-label="Workspace"
+            >
+              <span>L</span>
+            </button>
+            <button type="button" class="icon-rail-button" data-rail-target="flow" aria-label="Flow">
+              <span>F</span>
+            </button>
+            <button type="button" class="icon-rail-button" data-rail-target="clients" aria-label="Clients">
+              <span>C</span>
+            </button>
+            <span class="icon-rail-divider" aria-hidden="true"></span>
+            <button type="button" class="icon-rail-button" data-rail-target="new-client" aria-label="New client">
+              <span>+</span>
+            </button>
+            <button type="button" class="icon-rail-button" data-rail-target="advanced" aria-label="Advanced settings">
+              <span>S</span>
+            </button>
+          </div>
+
+          <div class="dashboard-icon-rail-bottom">
+            <button type="button" class="icon-rail-avatar" id="icon-rail-profile-button" aria-label="Profile menu">
+              <span id="icon-rail-avatar-label">LU</span>
+            </button>
+          </div>
+        </aside>
+
         <aside class="client-rail dashboard-sidebar">
           <div class="dashboard-sidebar-panel">
             <div class="dashboard-sidebar-head">
               <button type="button" id="workspace-switcher-button" class="workspace-switcher-button">
-                <span class="workspace-switcher-mark">LM</span>
+                <span class="workspace-switcher-mark">L</span>
                 <span class="workspace-switcher-copy">
-                  <strong id="sidebar-brand-title">EasyOnlinePresence Workspace</strong>
-                  <span id="sidebar-brand-subtitle">Workspace</span>
+                  <strong id="sidebar-brand-title">Lumix Workspace</strong>
+                  <span id="sidebar-brand-subtitle">Guided marketing system</span>
                 </span>
                 <span class="workspace-switcher-caret">▾</span>
               </button>
             </div>
 
-            <nav class="dashboard-sidebar-groups dashboard-primary-nav" aria-label="Workspace sections">
-              <section class="sidebar-group sidebar-group-nav">
+            <label class="dashboard-sidebar-search" aria-label="Search clients">
+              <span class="sidebar-search-icon">⌕</span>
+              <input id="sidebar-search" type="search" placeholder="Search clients or workflow" />
+            </label>
+
+            <nav class="dashboard-sidebar-groups" aria-label="Workspace sections">
+              <section class="sidebar-group">
                 <span class="sidebar-group-label">Workspace</span>
-                <button type="button" class="sidebar-nav-item sidebar-nav-item-active" data-sidebar-target="dashboard">
-                  <span class="sidebar-nav-icon">DB</span>
+                <button type="button" class="sidebar-nav-item sidebar-nav-item-active" data-sidebar-target="workspace">
+                  <span class="sidebar-nav-icon">◈</span>
                   <span class="sidebar-nav-copy">
-                    <strong>Website</strong>
-                    <small>Live preview</small>
+                    <strong>Overview</strong>
+                    <small>Current workspace pulse</small>
                   </span>
                 </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="client">
-                  <span class="sidebar-nav-icon">CL</span>
+                <button type="button" class="sidebar-nav-item" data-sidebar-target="flow">
+                  <span class="sidebar-nav-icon">↗</span>
                   <span class="sidebar-nav-copy">
-                    <strong>Brief</strong>
-                    <small>Business context</small>
+                    <strong>Core flow</strong>
+                    <small>Five guided production steps</small>
                   </span>
                 </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="strategy">
-                  <span class="sidebar-nav-icon">ST</span>
+                <button type="button" class="sidebar-nav-item" data-sidebar-target="clients">
+                  <span class="sidebar-nav-icon">◌</span>
                   <span class="sidebar-nav-copy">
-                    <strong>Direction</strong>
-                    <small>Offer and angle</small>
+                    <strong>Clients</strong>
+                    <small>Active workspaces and handoff state</small>
                   </span>
                 </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="generate">
-                  <span class="sidebar-nav-icon">GN</span>
+              </section>
+
+              <section class="sidebar-group">
+                <span class="sidebar-group-label">Tools</span>
+                <button type="button" class="sidebar-nav-item" id="new-client-sidebar-button" data-sidebar-target="new-client">
+                  <span class="sidebar-nav-icon">＋</span>
                   <span class="sidebar-nav-copy">
-                    <strong>Generate</strong>
-                    <small>Create website</small>
+                    <strong>New client</strong>
+                    <small>Create a new guided setup</small>
                   </span>
                 </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="preview">
-                  <span class="sidebar-nav-icon">PV</span>
+                <button type="button" class="sidebar-nav-item" id="advanced-sidebar-button" data-sidebar-target="advanced">
+                  <span class="sidebar-nav-icon">⌘</span>
                   <span class="sidebar-nav-copy">
-                    <strong>Inspect</strong>
-                    <small>Website, blog, SEO</small>
-                  </span>
-                </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="publish">
-                  <span class="sidebar-nav-icon">PB</span>
-                  <span class="sidebar-nav-copy">
-                    <strong>Publish</strong>
-                    <small>Go live</small>
+                    <strong>Advanced</strong>
+                    <small>Settings, jobs and reporting</small>
                   </span>
                 </button>
               </section>
             </nav>
 
-            <button id="new-client-trigger" class="ghost-button dashboard-sidebar-cta" type="button" data-sidebar-target="new-client">
-              + New client
-            </button>
-
-            <article class="panel simple-panel clients-panel sidebar-recent-panel" data-guide="clients">
-              <div class="panel-head clients-head clients-head-compact">
+            <article class="panel simple-panel workflow-rail-panel" data-guide="core-flow">
+              <div class="panel-head">
                 <div>
-                  <h2>Recent clients</h2>
-                  <p>Switch active workspace.</p>
+                  <h2>Pääflow</h2>
+                  <p id="flow-rail-caption">Yksi aktiivinen askel kerrallaan.</p>
+                </div>
+              </div>
+              <div id="flow-rail-list" class="rail-flow-list"></div>
+            </article>
+
+            <article class="panel simple-panel clients-panel" data-guide="clients">
+              <div class="panel-head clients-head">
+                <div>
+                  <h2>Asiakkaat</h2>
+                  <p>Valitse yksi ja jatka flow'ta.</p>
                 </div>
                 <p id="clients-caption">0 asiakasta</p>
               </div>
-              <div id="clients-list" class="client-selector client-selector-compact"></div>
+              <div id="clients-list" class="client-selector"></div>
+            </article>
+
+            <article class="sidebar-upgrade-card">
+              <span class="sidebar-group-label">Lumix note</span>
+              <strong>Keep one client active at a time.</strong>
+              <p>Focused flow keeps strategy, assets and publish state aligned without dashboard noise.</p>
+              <button id="new-client-trigger" class="ghost-button rail-new-client-button" type="button" data-guide="new-client">
+                + New client
+              </button>
             </article>
 
             <div class="sidebar-user-row">
               <button type="button" id="profile-menu-button" class="sidebar-user-button">
                 <span class="sidebar-user-avatar" id="sidebar-user-avatar">LU</span>
                 <span class="sidebar-user-copy">
-                  <strong id="sidebar-user-name">EasyOnlinePresence User</strong>
+                  <strong id="sidebar-user-name">Lumix User</strong>
                   <small id="sidebar-user-role">Workspace owner</small>
                 </span>
                 <span class="workspace-switcher-caret">▾</span>
@@ -100,21 +148,21 @@
             <div id="workspace-switcher-popover" class="dashboard-popover dashboard-popover-workspace" aria-hidden="true">
               <div class="dashboard-popover-head">
                 <span class="sidebar-group-label">Workspace</span>
-                <strong id="workspace-popover-title">EasyOnlinePresence Workspace</strong>
+                <strong id="workspace-popover-title">Lumix Workspace</strong>
               </div>
               <div class="dashboard-popover-list">
                 <button type="button" class="dashboard-popover-item is-active">
-                  <span class="dashboard-popover-item-mark">WS</span>
+                  <span class="dashboard-popover-item-mark">L</span>
                   <span>
-                    <strong id="workspace-popover-name">EasyOnlinePresence Workspace</strong>
+                    <strong id="workspace-popover-name">Lumix Workspace</strong>
                     <small id="workspace-popover-meta">Primary production space</small>
                   </span>
                 </button>
                 <button type="button" class="dashboard-popover-item dashboard-popover-item-muted" data-open-drawer="advanced">
-                  <span class="dashboard-popover-item-mark">AD</span>
+                  <span class="dashboard-popover-item-mark">⌘</span>
                   <span>
                     <strong>Open advanced</strong>
-                    <small>Settings and operations</small>
+                    <small>Settings, queue and reporting</small>
                   </span>
                 </button>
               </div>
@@ -123,28 +171,28 @@
             <div id="profile-settings-popover" class="dashboard-popover dashboard-popover-profile" aria-hidden="true">
               <div class="dashboard-popover-head">
                 <span class="sidebar-group-label">Profile</span>
-                <strong id="profile-popover-name">EasyOnlinePresence User</strong>
+                <strong id="profile-popover-name">Lumix User</strong>
               </div>
               <div class="dashboard-popover-list">
                 <button type="button" class="dashboard-popover-item" id="lumix-button">
-                  <span class="dashboard-popover-item-mark">LX</span>
+                  <span class="dashboard-popover-item-mark">✦</span>
                   <span>
-                    <strong>Avaa Lumi</strong>
-                    <small>Open the Lumi assistant layer</small>
+                    <strong>Avaa Lumix</strong>
+                    <small>Bring up the Lumix companion</small>
                   </span>
                 </button>
                 <button type="button" class="dashboard-popover-item" id="advanced-toggle" data-guide="advanced">
-                  <span class="dashboard-popover-item-mark">AD</span>
+                  <span class="dashboard-popover-item-mark">⌘</span>
                   <span>
                     <strong>Advanced settings</strong>
-                    <small>Manage team, reports and queue</small>
+                    <small>Inspect jobs, reports and team</small>
                   </span>
                 </button>
                 <button type="button" class="dashboard-popover-item dashboard-popover-item-muted" id="logout-button">
-                  <span class="dashboard-popover-item-mark">LO</span>
+                  <span class="dashboard-popover-item-mark">⤴</span>
                   <span>
                     <strong>Kirjaudu ulos</strong>
-                    <small>End current session</small>
+                    <small>End this current session</small>
                   </span>
                 </button>
               </div>
@@ -155,8 +203,8 @@
         <section class="workflow-shell" data-guide="workflow">
           <section class="dashboard-topbar">
             <div>
-              <p class="eyebrow">EasyOnlinePresence</p>
-              <h1 id="agency-title">Dashboard</h1>
+              <p class="eyebrow">Lumix</p>
+              <h1 id="agency-title">Työtila</h1>
             </div>
             <div class="toolbar-actions">
               <button class="ghost-button topbar-action-button" type="button" data-open-drawer="new-client">New client</button>
@@ -168,10 +216,6 @@
             <div id="active-client-view"></div>
           </div>
         </section>
-
-        <aside class="dashboard-context-rail">
-          <div id="workspace-rail" class="workspace-rail"></div>
-        </aside>
       </section>
     </main>
 
@@ -221,7 +265,7 @@
             <div class="panel-head">
               <div>
                 <h2>Workspace settings</h2>
-                <p>Työjono, raportit, tiimi ja EasyOnlinePresence-tausta.</p>
+                <p>Työjono, raportit, tiimi ja Lumix-tausta.</p>
               </div>
             </div>
 
@@ -247,8 +291,8 @@
 
               <article class="panel simple-panel simple-panel-nested lumix-panel">
                 <div class="panel-head">
-                  <h2>Lumi taustalla</h2>
-                  <p id="lumix-summary">Näet täältä miten Lumi auttaa.</p>
+                  <h2>Lumix taustalla</h2>
+                  <p id="lumix-summary">Näet täältä miten Lumix auttaa.</p>
                 </div>
                 <div id="lumix-codex" class="mini-list"></div>
               </article>
