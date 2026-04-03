@@ -7,7 +7,9 @@ const state = {
   sidebarSection: "workspace",
   openPopover: null,
   previewTabs: {},
+  previewDevices: {},
   setupModes: {},
+  generatingClients: {},
   tourActive: false,
   tourStepIndex: 0,
   tourInitialized: false,
@@ -27,6 +29,7 @@ const jobsList = document.getElementById("jobs-list");
 const lumixCodex = document.getElementById("lumix-codex");
 const lumixSummary = document.getElementById("lumix-summary");
 const activeClientView = document.getElementById("active-client-view");
+const workspaceRail = document.getElementById("workspace-rail");
 const clientAdvancedView = document.getElementById("client-advanced-view");
 const lumixCoach = document.getElementById("lumix-coach");
 const sidebarSearch = document.getElementById("sidebar-search");
@@ -56,6 +59,7 @@ const lumixAssistState = new Map();
 let guideHighlightTimeout = null;
 const lumixTourStorageKey = "lumix-tour-dismissed-v1";
 const lumixHiddenStorageKey = "lumix-hidden-v1";
+const workspaceSections = new Set(["dashboard", "client", "strategy", "generate", "preview", "publish"]);
 
 function getDrawer(name) {
   if (name === "new-client") return newClientDrawer;
@@ -221,6 +225,13 @@ function getInitials(...parts) {
     .join("");
 }
 
+function getDisplayName(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "EasyOnlinePresence user";
+  if (!raw.includes("@")) return raw;
+  return raw.split("@")[0];
+}
+
 function getFilteredClients(clients) {
   const query = state.sidebarQuery.trim().toLowerCase();
   if (!query) return clients;
@@ -241,19 +252,53 @@ function getFilteredClients(clients) {
 }
 
 function syncSidebarActiveState() {
-  document.querySelectorAll("[data-sidebar-target], [data-rail-target]").forEach((element) => {
-    const target = element.dataset.sidebarTarget || element.dataset.railTarget;
+  document.querySelectorAll("[data-sidebar-target]").forEach((element) => {
+    const target = element.dataset.sidebarTarget;
     const active = target === state.sidebarSection;
     if (element.classList.contains("sidebar-nav-item")) {
       element.classList.toggle("sidebar-nav-item-active", active);
     }
-    if (element.classList.contains("icon-rail-button")) {
-      element.classList.toggle("icon-rail-button-active", active);
+    if (element.id === "new-client-trigger") {
+      element.classList.toggle("dashboard-sidebar-cta-active", active);
     }
   });
 }
 
-function focusSidebarSection(section) {
+function getWorkspaceSectionLabel(section) {
+  const labels = {
+    dashboard: "Website",
+    client: "Brief",
+    strategy: "Direction",
+    generate: "Generate",
+    preview: "Website",
+    publish: "Publish"
+  };
+
+  return labels[section] || "Dashboard";
+}
+
+function getCurrentWorkspaceSection(client) {
+  if (workspaceSections.has(state.sidebarSection)) return state.sidebarSection;
+
+  if (!client) return "dashboard";
+  return "dashboard";
+}
+
+function getSectionFromGuideTarget(target) {
+  if (!target) return null;
+  if (target.includes("new-client")) return "new-client";
+  if (target.includes("advanced")) return "advanced";
+  if (target.includes("clients")) return "client";
+  if (target.includes("intake")) return "strategy";
+  if (target.includes("generate")) return "generate";
+  if (target.includes("preview")) return "preview";
+  if (target.includes("publish")) return "publish";
+  if (target.includes("workflow") || target.includes("core-flow")) return "dashboard";
+  if (target.includes("leads")) return "publish";
+  return null;
+}
+
+function focusSidebarSection(section, options = {}) {
   if (!section) return;
 
   if (section === "new-client") {
@@ -268,15 +313,9 @@ function focusSidebarSection(section) {
 
   state.sidebarSection = section;
   syncSidebarActiveState();
-
-  const target =
-    section === "flow"
-      ? document.querySelector("[data-guide='core-flow']")
-      : section === "clients"
-        ? document.querySelector("[data-guide='clients']")
-        : document.querySelector(".workflow-shell");
-
-  target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (options.render !== false) {
+    render();
+  }
 }
 
 const magicLocationSignals = [
@@ -792,6 +831,13 @@ function clearGuideHighlights() {
 
 function highlightGuideTarget(selector) {
   if (!selector) return;
+  const section = getSectionFromGuideTarget(selector);
+  if (section && section !== state.sidebarSection && section !== "new-client" && section !== "advanced") {
+    focusSidebarSection(section);
+  } else if (section === "new-client" || section === "advanced") {
+    focusSidebarSection(section);
+  }
+
   const target = document.querySelector(selector);
   if (!target) return;
 
@@ -824,7 +870,7 @@ function getNextStep(client) {
   if (!hasContent(client)) {
     return {
       title: "Tee tämä seuraavaksi",
-      text: "Paina Generate all. Lumix tekee koko paketin."
+      text: "Paina Generate all. Lumi tekee koko paketin."
     };
   }
 
@@ -901,7 +947,13 @@ function getSetupMode(client) {
 }
 
 function getPreviewTab(client) {
-  return state.previewTabs[client.id] || "landing";
+  const tab = state.previewTabs[client.id];
+  if (tab === "landing") return "website";
+  return tab || "website";
+}
+
+function getPreviewDevice(client) {
+  return state.previewDevices[client.id] || "desktop";
 }
 
 function renderStageAction(action, className = "") {
@@ -1019,7 +1071,7 @@ function getWorkflowGuide(client) {
       stateLabel: "Brief added",
       stateTone: "draft",
       heading: "Review setup",
-      description: "Turn the brief into a usable setup so Lumix can build the strategy next.",
+      description: "Turn the brief into a usable setup so Lumi can build the strategy next.",
       helper: `Step ${currentStep.number} of 5. ${completedSteps}/5 completed.`,
       primaryAction: {
         kind: "focus",
@@ -1035,7 +1087,7 @@ function getWorkflowGuide(client) {
       stateLabel: "Setup drafted",
       stateTone: "progress",
       heading: "Generate strategy",
-      description: "Your business details are in place. Generate the Lumix setup before assets.",
+      description: "Your business details are in place. Generate the Lumi setup before assets.",
       helper: `Step ${currentStep.number} of 5. ${completedSteps}/5 completed.`,
       primaryAction: {
         kind: "action",
@@ -1115,23 +1167,58 @@ function renderStickyStageHeader(client) {
   const currentStep = getCurrentFlowStep(client);
   const guide = getWorkflowGuide(client);
   const nextStep = getNextStep(client);
+  const completedSteps = countCompletedSteps(client);
+  const publishReadiness = guide.publishReadiness;
 
   return `
-    <div class="workflow-stage-header">
-      <div class="workflow-status-card">
-        <span>Main status</span>
-        <strong>${escapeHtml(guide.heading)}</strong>
-        <p>${escapeHtml(guide.description)}</p>
+    <section class="workflow-stage-header">
+      <div class="workflow-stage-hero-top">
+        <div class="workflow-stage-hero-copy">
+          <span class="section-kicker">Aktiivinen asiakas</span>
+          <h2>${escapeHtml(client.businessName)}</h2>
+          <p class="body-copy workflow-stage-hero-description">${escapeHtml(client.description)}</p>
+        </div>
+        <div class="workflow-stage-hero-meta">
+          <span class="client-status client-status-subtle">${escapeHtml(client.billingStatus)}</span>
+          <span class="workflow-stage-badge">${escapeHtml(`Stage ${currentStep.number}/5`)}</span>
+        </div>
       </div>
+
+      <div class="workflow-stage-hero-body">
+        <div class="workflow-status-card">
+          <span>Current focus</span>
+          <strong>${escapeHtml(guide.heading)}</strong>
+          <p>${escapeHtml(guide.description)}</p>
+        </div>
+
+        <div class="workflow-hero-stat-grid">
+          <article class="workflow-hero-stat">
+            <span>Current step</span>
+            <strong>${escapeHtml(currentStep.title)}</strong>
+            <p>${escapeHtml(guide.stateLabel)}</p>
+          </article>
+          <article class="workflow-hero-stat">
+            <span>Progress</span>
+            <strong>${escapeHtml(`${completedSteps}/5`)}</strong>
+            <p>${escapeHtml(`Completed steps in the workflow.`)}</p>
+          </article>
+          <article class="workflow-hero-stat">
+            <span>Publish status</span>
+            <strong>${escapeHtml(publishReadiness.title)}</strong>
+            <p>${escapeHtml(truncateText(publishReadiness.text, 88))}</p>
+          </article>
+        </div>
+      </div>
+
       <div class="workflow-stage-header-summary">
-        <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(`Stage ${currentStep.number}/5: ${currentStep.title}`)}</span>
+        <span class="workflow-header-pill workflow-header-pill-primary">${escapeHtml(`Now: ${guide.stateLabel}`)}</span>
         <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(nextStep.text)}</span>
-        <span class="workflow-header-pill workflow-header-pill-muted">${escapeHtml(guide.publishReadiness.title)}</span>
       </div>
+
       <div class="workflow-stage-header-actions">
         ${renderWorkflowFocusAction(client, guide)}
       </div>
-    </div>
+    </section>
   `;
 }
 
@@ -1151,7 +1238,7 @@ function getPrimaryFlowSteps(client) {
         number: 2,
         title: "Setup",
         status: "upcoming",
-        text: "Lumix ehdottaa rakennetta ja CTA:ta.",
+        text: "Lumi ehdottaa rakennetta ja CTA:ta.",
         target: "[data-guide='intake']"
       },
       {
@@ -1316,7 +1403,7 @@ function getTourSteps(client) {
     },
     {
       title: "Tell us about your business",
-      text: "Tämä on aloituskohta. Kirjoita yksi business-kuvaus ja Lumix muodostaa setupin.",
+      text: "Tämä on aloituskohta. Kirjoita yksi business-kuvaus ja Lumi muodostaa setupin.",
       target: "[data-guide='new-client']"
     }
   ];
@@ -1330,7 +1417,7 @@ function getTourSteps(client) {
       },
       {
         title: "Generate all",
-        text: "Tämä on päätoiminto. Lumix tekee sivun, blogit ja SEO:n samalla.",
+        text: "Tämä on päätoiminto. Lumi tekee sivun, blogit ja SEO:n samalla.",
         target: "[data-guide='generate']"
       },
       {
@@ -1394,15 +1481,15 @@ function activateLumix() {
 function getCoachState(client) {
   if (!client) {
     return {
-      title: "Lumix",
-      text: "Lumix toimii tässä dashboardissa. Luo ensin yksi asiakas, niin ohjaan seuraavaan kohtaan.",
+      title: "Lumi",
+      text: "Lumi toimii tässä dashboardissa. Luo ensin yksi asiakas, niin ohjaan seuraavaan kohtaan.",
       target: "[data-guide='new-client']"
     };
   }
 
   if (!hasProfile(client)) {
     return {
-      title: "Lumix",
+      title: "Lumi",
       text: "Täytä ensin tiedot ja tallenna ne.",
       target: "[data-guide='intake']"
     };
@@ -1410,7 +1497,7 @@ function getCoachState(client) {
 
   if (!hasContent(client)) {
     return {
-      title: "Lumix",
+      title: "Lumi",
       text: "Seuraava klikki on Generate all. Sillä syntyy koko paketti yhdellä kertaa.",
       target: "[data-guide='generate']"
     };
@@ -1418,7 +1505,7 @@ function getCoachState(client) {
 
   if (!client.publishTargets.length) {
     return {
-      title: "Lumix",
+      title: "Lumi",
       text: "Näe lopputulos ja lisää sitten yksi publish-kanava lisäasetuksista.",
       target: "[data-guide='advanced']"
     };
@@ -1426,14 +1513,14 @@ function getCoachState(client) {
 
   if (!client.publishHistory.length) {
     return {
-      title: "Lumix",
+      title: "Lumi",
       text: "Lopputulos on valmis. Seuraava klikki on Publish.",
       target: "[data-guide='publish']"
     };
   }
 
   return {
-    title: "Lumix",
+    title: "Lumi",
     text: "Nyt seuraa liidejä ja katso mikä toimii parhaiten.",
     target: "[data-guide='leads']"
   };
@@ -1446,6 +1533,22 @@ function getLumixAssistState(clientId) {
       suggestedUpdates: null
     }
   );
+}
+
+async function requestLumixAssist(clientId, message, pendingMessage = "Lumi miettii ideaa...") {
+  const result = await api(`/api/clients/${clientId}/lumix-assist`, {
+    method: "POST",
+    body: JSON.stringify({ message })
+  });
+
+  lumixAssistState.set(clientId, {
+    reply: result.assist?.reply || "",
+    suggestedUpdates: result.assist?.suggestedUpdates || null
+  });
+
+  render();
+  renderCoach(getActiveClient());
+  return result;
 }
 
 function buildIntakePayloadFromClient(client, overrides = {}) {
@@ -1469,7 +1572,7 @@ function renderCoach(client) {
     lumixCoach.innerHTML = `
       <button type="button" class="lumix-coach-toggle" data-coach-action="expand">
         <span class="lumix-coach-avatar">L</span>
-        <span>Lumix</span>
+        <span>Lumi</span>
       </button>
     `;
     return;
@@ -1485,7 +1588,7 @@ function renderCoach(client) {
         <div class="lumix-coach-head">
           <span class="lumix-coach-avatar">L</span>
           <div>
-            <strong>Lumix opastus</strong>
+            <strong>Lumi opastus</strong>
             <p>Kohta ${currentIndex + 1} / ${tourSteps.length}</p>
           </div>
           <button type="button" class="ghost-button lumix-coach-hide" data-coach-action="collapse">Piilota</button>
@@ -1543,7 +1646,7 @@ function renderCoach(client) {
           ? `
             <form class="lumix-coach-form" data-lumix-form data-client-id="${client.id}">
               <label>
-                <span>Kirjoita idea Lumixille</span>
+                <span>Kirjoita idea Lumille</span>
                 <textarea
                   name="message"
                   rows="3"
@@ -1551,7 +1654,7 @@ function renderCoach(client) {
                   required
                 ></textarea>
               </label>
-              <button type="submit">Kysy Lumixilta</button>
+              <button type="submit">Kysy Lumilta</button>
             </form>
           `
           : ""
@@ -1560,7 +1663,7 @@ function renderCoach(client) {
         hasAssistReply
           ? `
             <div class="lumix-coach-reply">
-              <strong>Lumix</strong>
+              <strong>Lumi</strong>
               <p>${escapeHtml(assist.reply)}</p>
               ${
                 assist.suggestedUpdates && Object.keys(assist.suggestedUpdates).length
@@ -1703,7 +1806,7 @@ function renderLumixPanel() {
   const activeClient = getActiveClient();
   const guide = activeClient ? getWorkflowGuide(activeClient) : null;
   if (!agent) {
-    lumixSummary.textContent = "Lumix-data latautuu...";
+    lumixSummary.textContent = "Lumi-data latautuu...";
     lumixCodex.innerHTML = '<article class="mini-card"><p>Ei dataa vielä.</p></article>';
     return;
   }
@@ -1728,7 +1831,7 @@ function renderLumixPanel() {
       <p>${escapeHtml(agent.summary)}</p>
     </article>
     <article class="mini-card">
-      <strong>Miten Lumix auttaa</strong>
+      <strong>Miten Lumi auttaa</strong>
       <p>${escapeHtml(codex?.intro || "")}</p>
     </article>
     <article class="mini-card">
@@ -1815,6 +1918,140 @@ function renderWebsiteMockPreview(client, compact = false) {
   const subheadline = website.subheadline || recommendation.positioning || client.description;
   const cta = website.cta || recommendation.ctaStrategy || client.businessProfile?.mainCta || "Primary CTA";
   const highlightBlocks = sections.slice(1, 4).length ? sections.slice(1, 4) : ["Services", "Proof", "CTA"];
+  const contentAngles = Array.isArray(recommendation.contentAngles) ? recommendation.contentAngles : [];
+  const slug =
+    client.seo?.slug || client.businessName.toLowerCase().trim().replace(/[^a-z0-9\s-]/gi, "").replace(/\s+/g, "-");
+
+  if (!compact) {
+    const proofQuote =
+      client.blogs?.[0]?.excerpt ||
+      recommendation.positioning ||
+      "This preview turns strategy into a more credible and polished website direction.";
+
+    return `
+      <article class="website-mock website-mock-large">
+        <div class="website-mock-chrome website-mock-chrome-large">
+          <div class="website-mock-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="website-mock-url">${escapeHtml(`${window.location.hostname || "easyonlinepresence.com"}/${slug}`)}</div>
+        </div>
+
+        <div class="website-preview-viewport">
+          <div class="website-preview-page">
+            <section class="website-preview-hero">
+              <div class="website-preview-hero-grid">
+                <div class="website-preview-copy">
+                  <div class="website-preview-eyebrow">
+                    <i></i>
+                    <span>${escapeHtml(client.businessName)} preview</span>
+                  </div>
+                  <h2>${escapeHtml(headline)}</h2>
+                  <p>${escapeHtml(subheadline)}</p>
+                  <div class="website-preview-actions">
+                    <span class="website-preview-button website-preview-button-primary">${escapeHtml(cta)}</span>
+                    <span class="website-preview-button website-preview-button-secondary">See full preview</span>
+                  </div>
+                </div>
+
+                <div class="website-preview-stats">
+                  <article class="website-preview-stat">
+                    <span>Stage</span>
+                    <strong>Live preview</strong>
+                  </article>
+                  <article class="website-preview-stat">
+                    <span>Assets</span>
+                    <strong>Landing + SEO</strong>
+                  </article>
+                  <article class="website-preview-stat">
+                    <span>Workflow</span>
+                    <strong>${escapeHtml(client.publishTargets.length ? "Ready to publish" : "Needs publish setup")}</strong>
+                  </article>
+                </div>
+              </div>
+            </section>
+
+            <section class="website-preview-feature-grid">
+              ${highlightBlocks
+                .map(
+                  (section, index) => `
+                    <article class="website-preview-feature">
+                      <span class="website-preview-kicker">Offer</span>
+                      <h3>${escapeHtml(section)}</h3>
+                      <p>${escapeHtml(
+                        truncateText(
+                          contentAngles[index] || `${section} block tuned to the current setup and CTA path.`,
+                          120
+                        )
+                      )}</p>
+                    </article>
+                  `
+                )
+                .join("")}
+            </section>
+
+            <section class="website-preview-proof-grid">
+              <article class="website-preview-proof">
+                <span class="website-preview-kicker">Proof</span>
+                <h3>Trusted by teams that want clarity, not content chaos.</h3>
+                <blockquote class="website-preview-quote">
+                  <p>${escapeHtml(`“${truncateText(proofQuote, 180)}”`)}</p>
+                  <footer>
+                    <strong>${escapeHtml(recommendation.primaryAudience || "Ideal audience")}</strong>
+                    <span>${escapeHtml(recommendation.primaryOffer || "Primary offer")}</span>
+                  </footer>
+                </blockquote>
+              </article>
+
+              <aside class="website-preview-structure">
+                <span class="website-preview-kicker">Website structure</span>
+                <div class="website-preview-structure-list">
+                  ${sections
+                    .slice(0, 5)
+                    .map(
+                      (section) => `
+                        <div class="website-preview-structure-item">
+                          <strong>${escapeHtml(section)}</strong>
+                          <span>Section</span>
+                        </div>
+                      `
+                    )
+                    .join("")}
+                </div>
+              </aside>
+            </section>
+
+            <section class="website-preview-cta-section">
+              <div>
+                <span class="website-preview-kicker">Final CTA</span>
+                <h3>Turn this preview into a live-ready website workflow.</h3>
+                <p>Review the structure, refine the message, and publish when the package feels right.</p>
+              </div>
+              <div class="website-preview-cta-actions">
+                <span class="website-preview-button website-preview-button-primary">Publish preview</span>
+              </div>
+            </section>
+
+            <footer class="website-preview-footer">
+              <div class="website-preview-footer-row">
+                <div class="website-preview-footer-brand">
+                  <strong>${escapeHtml(client.businessName)}</strong>
+                  <span>Website preview inside the Lumix workspace.</span>
+                </div>
+                <nav class="website-preview-footer-links">
+                  ${["Overview", "Offer", "Proof", "SEO", "Contact"]
+                    .map((item) => `<span>${escapeHtml(item)}</span>`)
+                    .join("")}
+                </nav>
+              </div>
+            </footer>
+          </div>
+        </div>
+      </article>
+    `;
+  }
 
   return `
     <article class="website-mock${compact ? " website-mock-compact" : ""}">
@@ -1824,7 +2061,7 @@ function renderWebsiteMockPreview(client, compact = false) {
           <span></span>
           <span></span>
         </div>
-        <div class="website-mock-url">${escapeHtml(client.businessName.toLowerCase().replace(/\s+/g, "-"))}.lumix.site</div>
+        <div class="website-mock-url">${escapeHtml(`${window.location.hostname || "easyonlinepresence.com"}/${client.businessName.toLowerCase().replace(/\s+/g, "-")}`)}</div>
       </div>
       <div class="website-mock-canvas">
         <section class="website-hero">
@@ -1933,6 +2170,289 @@ function renderSeoAssetPreview(seo, compact = false) {
   `;
 }
 
+function getWebsiteHeadline(client) {
+  return client.website?.headline || client.strategyRecommendation?.primaryOffer || client.businessName;
+}
+
+function getWebsiteSubheadline(client) {
+  return client.website?.subheadline || client.strategyRecommendation?.positioning || client.description;
+}
+
+function getWebsiteCta(client) {
+  return client.website?.cta || client.strategyRecommendation?.ctaStrategy || client.businessProfile?.mainCta || "Book a call";
+}
+
+function renderPreviewDeviceToggle(client) {
+  const device = getPreviewDevice(client);
+  return `
+    <div class="reveal-device-toggle" role="tablist" aria-label="Preview device">
+      <button
+        type="button"
+        class="reveal-device-button${device === "desktop" ? " reveal-device-button-active" : ""}"
+        data-preview-device="desktop"
+      >
+        Desktop
+      </button>
+      <button
+        type="button"
+        class="reveal-device-button${device === "mobile" ? " reveal-device-button-active" : ""}"
+        data-preview-device="mobile"
+      >
+        Mobile
+      </button>
+    </div>
+  `;
+}
+
+function renderRevealWebsiteSurface(client, mode = "ready") {
+  const previewUrl = `${window.location.hostname || "easyonlinepresence.com"}/${client.businessName.toLowerCase().replace(/\s+/g, "-")}`;
+
+  if (mode === "generating") {
+    const device = getPreviewDevice(client);
+    return `
+      <div class="reveal-browser${device === "mobile" ? " reveal-browser-mobile" : ""}">
+        <div class="reveal-browser-chrome">
+          <div class="reveal-browser-dots"><span></span><span></span><span></span></div>
+          <div class="reveal-browser-url">${escapeHtml(previewUrl)}</div>
+          ${renderPreviewDeviceToggle(client)}
+        </div>
+        <div class="reveal-browser-scroll">
+          <div class="reveal-skeleton-page">
+            <section class="reveal-skeleton-hero">
+              <span class="reveal-skeleton-badge"></span>
+              <span class="reveal-skeleton-line reveal-skeleton-line-xl"></span>
+              <span class="reveal-skeleton-line reveal-skeleton-line-lg"></span>
+              <div class="reveal-skeleton-actions">
+                <span class="reveal-skeleton-pill"></span>
+                <span class="reveal-skeleton-pill reveal-skeleton-pill-muted"></span>
+              </div>
+            </section>
+            <section class="reveal-skeleton-grid">
+              <article></article>
+              <article></article>
+              <article></article>
+            </section>
+            <section class="reveal-skeleton-band"></section>
+            <section class="reveal-skeleton-cta"></section>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (mode === "empty") {
+    return `
+      <div class="reveal-empty-preview reveal-empty-preview-large">
+        <div class="reveal-empty-copy">
+          <span class="section-kicker">Website reveal</span>
+          <h3>Your site appears here the moment you generate it.</h3>
+          <p>See the hero, sections and CTA in one full-page preview before you publish anything.</p>
+          <button type="button" data-action="generate">Generate website</button>
+        </div>
+        <div class="reveal-empty-site">
+          ${renderWebsiteMockPreview(client)}
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="website-reveal-render website-reveal-render-large" data-preview-url="${escapeHtml(previewUrl)}">
+      ${renderWebsiteMockPreview(client)}
+    </div>
+  `;
+}
+
+function renderRevealSecondaryPane(client, previewTab) {
+  if (previewTab === "blogs") {
+    return `
+      <div class="reveal-secondary-pane">
+        <div class="reveal-secondary-head">
+          <div>
+            <span class="section-kicker">Blog</span>
+            <h4>Supporting articles</h4>
+          </div>
+          <span class="reveal-secondary-meta">${escapeHtml(String(client.blogs.length || 0))} drafts</span>
+        </div>
+        ${renderBlogAssetStack(client.blogs)}
+      </div>
+    `;
+  }
+
+  if (previewTab === "seo") {
+    return `
+      <div class="reveal-secondary-pane">
+        <div class="reveal-secondary-head">
+          <div>
+            <span class="section-kicker">SEO</span>
+            <h4>Search snippet</h4>
+          </div>
+          <span class="reveal-secondary-meta">${client.seo ? "Ready" : "Waiting"}</span>
+        </div>
+        ${renderSeoAssetPreview(client.seo)}
+      </div>
+    `;
+  }
+
+  return renderRevealWebsiteSurface(client, client.website?.html ? "ready" : "empty");
+}
+
+function renderWebsiteRevealStage(client, options = {}) {
+  const workspaceMode = options.workspaceMode === true;
+  const generating = Boolean(state.generatingClients[client.id]);
+  const previewTab = getPreviewTab(client);
+  const hasWebsite = Boolean(client.website?.html);
+  const hasPreview = hasContent(client);
+  const runtime = getLumixRuntime(client);
+  const recommendation = client.strategyRecommendation;
+  const headline = getWebsiteHeadline(client);
+  const subheadline = getWebsiteSubheadline(client);
+  const cta = getWebsiteCta(client);
+  const previewTabs = [
+    { key: "website", label: "Website" },
+    { key: "blogs", label: "Blog" },
+    { key: "seo", label: "SEO" }
+  ];
+  const mode = generating ? "generating" : hasWebsite ? "ready" : "empty";
+  const description =
+    mode === "ready"
+      ? "Preview the page, inspect the sections and tweak the copy before you publish."
+      : mode === "generating"
+        ? "We are assembling the website preview now. Keep this page open."
+        : "Generate once and this space becomes your live website preview.";
+
+  const heroBadges = [
+    runtime.actions.generate_pack.ready || hasPreview ? "Ready to generate" : "Needs direction",
+    hasWebsite ? "Preview ready" : generating ? "Building preview" : "Awaiting website"
+  ];
+
+  const content = `
+    <section class="workspace-main-card workspace-main-card-reveal" data-guide="preview" data-client-id="${client.id}">
+      <div class="reveal-stage-head">
+        <div class="reveal-stage-copy">
+          <span class="section-kicker">Website reveal</span>
+          <h3>${escapeHtml(headline)}</h3>
+          <p>${escapeHtml(truncateText(subheadline || description, 140))}</p>
+        </div>
+        <div class="reveal-stage-meta">
+          ${heroBadges.map((badge) => `<span class="reveal-stage-pill">${escapeHtml(badge)}</span>`).join("")}
+        </div>
+      </div>
+
+      <div class="reveal-preview-tabs" role="tablist" aria-label="Generated assets">
+        ${previewTabs
+          .map(
+            (tab) => `
+              <button
+                type="button"
+                class="preview-tab${previewTab === tab.key ? " preview-tab-active" : ""}"
+                data-preview-tab="${escapeHtml(tab.key)}"
+              >
+                ${escapeHtml(tab.label)}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      ${previewTab === "website" ? renderRevealWebsiteSurface(client, mode) : renderRevealSecondaryPane(client, previewTab)}
+
+      <div class="reveal-support-bar">
+        <div class="reveal-support-card">
+          <span class="section-kicker">Headline</span>
+          <strong>${escapeHtml(headline)}</strong>
+          <p>${escapeHtml(truncateText(subheadline, 120))}</p>
+        </div>
+        <div class="reveal-support-card reveal-support-card-compact">
+          <span class="section-kicker">Primary CTA</span>
+          <strong>${escapeHtml(cta)}</strong>
+          <p>${escapeHtml(
+            truncateText(
+              recommendation?.primaryAudience || client.businessProfile?.audienceType || "Tailored to the current audience.",
+              96
+            )
+          )}</p>
+        </div>
+      </div>
+
+      ${renderRevealCopyLab(client)}
+    </section>
+  `;
+
+  if (workspaceMode) {
+    return `<section class="workspace-stage-panel workspace-stage-panel-reveal">${content}</section>`;
+  }
+
+  return `
+    <section class="workflow-stage workflow-stage-active">
+      ${content}
+    </section>
+  `;
+}
+
+function renderRevealCopyLab(client) {
+  const assist = getLumixAssistState(client.id);
+  const generating = Boolean(state.generatingClients[client.id]);
+  const quickPrompts = [
+    "Make the hero feel more premium.",
+    "Make the copy shorter and sharper.",
+    "Make the page more sales-focused.",
+    "Rewrite the CTA for higher intent leads."
+  ];
+
+  return `
+    <section class="reveal-copy-lab workspace-inline-copy-lab" data-client-id="${client.id}">
+      <div class="rail-card-head reveal-copy-head">
+        <div>
+          <span class="section-kicker">Copy lab</span>
+          <strong>Tweak inside the preview</strong>
+        </div>
+      </div>
+
+      <div class="reveal-quick-prompts">
+        ${quickPrompts
+          .map(
+            (prompt) => `
+              <button type="button" class="ghost-button reveal-quick-prompt" data-copy-prompt="${escapeHtml(prompt)}">
+                ${escapeHtml(prompt)}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <form class="reveal-copy-form" data-reveal-copy-form data-client-id="${client.id}">
+        <label>
+          <span>Ask Lumi to adjust the website</span>
+          <textarea
+            name="message"
+            rows="4"
+            placeholder="Make the hero feel more premium, shorten the subheadline and sharpen the CTA."
+            required
+          ></textarea>
+        </label>
+        <button type="submit"${generating ? " disabled" : ""}>Edit copy</button>
+      </form>
+
+      ${
+        assist.reply
+          ? `
+            <div class="reveal-assist-response">
+              <span class="section-kicker">Latest suggestion</span>
+              <p>${escapeHtml(assist.reply)}</p>
+            </div>
+          `
+          : `
+            <div class="reveal-assist-response reveal-assist-response-muted">
+              <span class="section-kicker">Live editing</span>
+              <p>Ask Lumi for sharper headlines, shorter copy or a more premium angle.</p>
+            </div>
+          `
+      }
+    </section>
+  `;
+}
+
 function getStageSurfaceClass(client, key) {
   const step = getPrimaryFlowSteps(client).find((item) => item.key === key);
   return step ? `stage-card-${step.status}` : "";
@@ -1990,7 +2510,8 @@ function renderClientStage(client) {
   });
 }
 
-function renderIntake(client) {
+function renderIntake(client, options = {}) {
+  const workspaceMode = options.workspaceMode === true;
   const profile = client.businessProfile || {};
   const notes = profile.rawNotes?.notes || "";
   const intakeCatalog = getIntakeCatalog();
@@ -2112,12 +2633,45 @@ function renderIntake(client) {
 
       <label>
         <span>Notes</span>
-        <textarea name="notes" rows="4" placeholder="Add any extra direction for Lumix.">${escapeHtml(notes)}</textarea>
+        <textarea name="notes" rows="4" placeholder="Add any extra direction for Lumi.">${escapeHtml(notes)}</textarea>
       </label>
 
       <button type="submit" class="ghost-button">Save setup</button>
     </form>
   `;
+
+  if (workspaceMode) {
+    return `
+      <section class="workspace-stage-panel" data-guide="intake">
+        ${renderStageGate({
+          number: 2,
+          title: "Strategy",
+          description: recommendation
+            ? "Review or refine the saved setup before generating assets."
+            : "Turn the client brief into a clear saved strategy.",
+          readyItems,
+          blocker: recommendation ? "" : "Generate setup to unlock asset generation.",
+          primaryAction: {
+            kind: "action",
+            label: recommendation ? "Refresh setup" : "Generate setup",
+            action: "recommend"
+          },
+          secondaryAction: recommendation
+            ? {
+                kind: "toggle-setup",
+                label: mode === "review" ? "Edit setup" : "Review setup",
+                mode: mode === "review" ? "edit" : "review",
+                ghost: true
+              }
+            : null,
+          tone: status === "completed" ? "completed" : recommendation ? "current" : "upcoming"
+        })}
+        <div class="intake-frame stage-card ${getStageSurfaceClass(client, "setup")}">
+          ${mode === "review" ? reviewBody : editBody}
+        </div>
+      </section>
+    `;
+  }
 
   if (status === "completed") {
     return renderStageSummary({
@@ -2162,7 +2716,7 @@ function renderIntake(client) {
         title: "Setup",
         description: recommendation
           ? "Review the saved strategy before you move into generation."
-          : "Turn the brief into a usable setup for Lumix.",
+          : "Turn the brief into a usable setup for Lumi.",
         readyItems,
         blocker: recommendation ? "" : "Generate setup to unlock asset generation.",
         primaryAction: {
@@ -2198,7 +2752,7 @@ function renderRecommendation(client) {
         <div class="section-head">
           <div>
             <span class="section-kicker">Vaihe 2</span>
-            <h4>Lumixin ehdotus</h4>
+            <h4>Lumin ehdotus</h4>
           </div>
           <p>Odottaa vaihetta 1.</p>
         </div>
@@ -2213,11 +2767,11 @@ function renderRecommendation(client) {
         <div class="section-head">
           <div>
             <span class="section-kicker">Vaihe 2</span>
-            <h4>Lumixin ehdotus</h4>
+            <h4>Lumin ehdotus</h4>
           </div>
           <p>Pyydä yksi suunta.</p>
         </div>
-        <p class="body-copy">${escapeHtml(recommendationEligibility.reason || "Lumix ehdottaa viestin, CTA:n ja sisältökulmat.")}</p>
+        <p class="body-copy">${escapeHtml(recommendationEligibility.reason || "Lumi ehdottaa viestin, CTA:n ja sisältökulmat.")}</p>
         ${
           recommendationEligibility.ready
             ? '<button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä ehdotus</button>'
@@ -2232,7 +2786,7 @@ function renderRecommendation(client) {
       <div class="section-head">
         <div>
           <span class="section-kicker">Vaihe 2</span>
-          <h4>Lumixin ehdotus</h4>
+          <h4>Lumin ehdotus</h4>
         </div>
         <p>Hyväksy tämä suunta ja jatka.</p>
       </div>
@@ -2354,7 +2908,7 @@ function renderLumixTimeline(client) {
 
   if (action?.action === "recommend_strategy") {
     stages[0].status = "active";
-    stages[0].meta = "Lumix päivitti suuntaa";
+    stages[0].meta = "Lumi päivitti suuntaa";
   } else if (action?.action === "generate_pack") {
     stages[1].status = "active";
     stages[1].meta = "Sisältö lisättiin jonoon";
@@ -2394,11 +2948,80 @@ function renderOntologySummary(client) {
   `;
 }
 
-function renderGenerateStage(client) {
+function renderGenerateStage(client, options = {}) {
+  const workspaceMode = options.workspaceMode === true;
   const runtime = getLumixRuntime(client);
   const generateEligibility = runtime.actions.generate_pack;
   const outputsReady = hasContent(client);
   const status = getStepStatus(client, "generate");
+
+  if (workspaceMode) {
+    return `
+      <section class="workspace-stage-panel" data-guide="generate">
+        ${renderStageGate({
+          number: 3,
+          title: "Generate",
+          description: "Create the landing page, blog drafts and SEO package from the saved strategy.",
+          readyItems: [
+            hasSavedSetup(client) ? "Setup saved" : "",
+            client.strategyRecommendation ? "Strategy ready" : ""
+          ].filter(Boolean),
+          blocker: generateEligibility.ready ? "" : generateEligibility.reason || "Setup is required before generation.",
+          primaryAction: generateEligibility.ready
+            ? {
+                kind: "action",
+                label: outputsReady ? "Generate again" : "Generate all",
+                action: "generate"
+              }
+            : {
+                kind: "focus",
+                label: "Open strategy",
+                target: "[data-guide='intake']"
+              },
+          secondaryAction: {
+            kind: "focus",
+            label: "Review setup",
+            target: "[data-guide='intake']",
+            ghost: true
+          },
+          tone: status === "completed" ? "completed" : generateEligibility.ready ? "current" : "upcoming"
+        })}
+        <div class="stage-card ${getStageSurfaceClass(client, "generate")}">
+          <div class="generate-asset-grid">
+            <article class="generate-asset-card">
+              <div class="generate-asset-head">
+                <strong>Landing page</strong>
+                <span class="generate-asset-badge${outputsReady && client.website?.html ? " generate-asset-badge-ready" : ""}">
+                  ${client.website?.html ? "Created" : "Queued"}
+                </span>
+              </div>
+              ${renderWebsiteMockPreview(client, true)}
+            </article>
+
+            <article class="generate-asset-card">
+              <div class="generate-asset-head">
+                <strong>Blog pack</strong>
+                <span class="generate-asset-badge${client.blogs.length ? " generate-asset-badge-ready" : ""}">
+                  ${client.blogs.length ? `${client.blogs.length} drafts` : "3 drafts"}
+                </span>
+              </div>
+              ${renderBlogAssetStack(client.blogs, true)}
+            </article>
+
+            <article class="generate-asset-card">
+              <div class="generate-asset-head">
+                <strong>SEO package</strong>
+                <span class="generate-asset-badge${client.seo ? " generate-asset-badge-ready" : ""}">
+                  ${client.seo ? "Created" : "Queued"}
+                </span>
+              </div>
+              ${renderSeoAssetPreview(client.seo, true)}
+            </article>
+          </div>
+        </div>
+      </section>
+    `;
+  }
 
   if (status === "completed") {
     return renderStageSummary({
@@ -2492,157 +3115,81 @@ function renderGenerateStage(client) {
   `;
 }
 
-function renderPreviewStage(client) {
-  const status = getStepStatus(client, "preview");
-
-  if (!hasContent(client)) {
-    return renderStageSummary({
-      number: 4,
-      title: "Preview",
-      summary: "Preview opens after generation is complete.",
-      status: "upcoming",
-      primaryAction: {
-        kind: "focus",
-        label: "Open generate",
-        target: "[data-guide='generate']"
-      }
-    });
-  }
-
-  const visibleBlogs = client.blogs.slice(0, 3);
-  const recommendation = client.strategyRecommendation;
-  const previewTab = getPreviewTab(client);
-  const previewTabs = [
-    { key: "landing", label: "Landing" },
-    { key: "blogs", label: "Blogs" },
-    { key: "seo", label: "SEO" }
-  ];
-
-  const previewPane =
-    previewTab === "blogs"
-      ? `
-          <div class="preview-pane-card">
-            ${renderBlogAssetStack(visibleBlogs)}
-          </div>
-        `
-      : previewTab === "seo"
-        ? `
-            <div class="preview-pane-card">
-              ${renderSeoAssetPreview(client.seo)}
-            </div>
-          `
-        : `
-            <div class="preview-pane-card">
-              ${renderWebsiteMockPreview(client)}
-            </div>
-          `;
-
-  if (status === "completed") {
-    return renderStageSummary({
-      number: 4,
-      title: "Preview",
-      summary: "Preview checked. Content is ready for publish.",
-      status,
-      primaryAction: {
-        kind: "link",
-        label: "Open preview",
-        href: `/client/${client.id}`,
-        targetBlank: true
-      },
-      secondaryAction: {
-        kind: "focus",
-        label: "Open publish",
-        target: "[data-guide='publish']"
-      }
-    });
-  }
-
-  return `
-    <section class="workflow-stage workflow-stage-active">
-      ${renderStageGate({
-        number: 4,
-        title: "Preview",
-        description: "Review one content view at a time before you move into publish.",
-        readyItems: [
-          client.website?.html ? "Landing ready" : "",
-          client.blogs.length ? `${client.blogs.length} blogs ready` : "",
-          client.seo ? "SEO ready" : ""
-        ].filter(Boolean),
-        blocker: client.publishTargets.length ? "" : "Add a publish channel after review to unlock go live.",
-        primaryAction: client.publishTargets.length
-          ? {
-              kind: "focus",
-              label: "Open publish",
-              target: "[data-guide='publish']"
-            }
-          : {
-              kind: "link",
-              label: "Open full preview",
-              href: `/client/${client.id}`,
-              targetBlank: true
-            },
-        secondaryAction: client.publishTargets.length
-          ? {
-              kind: "link",
-              label: "Open full preview",
-              href: `/client/${client.id}`,
-              targetBlank: true,
-              ghost: true
-            }
-          : {
-              kind: "drawer",
-              label: "Add publish channel",
-              drawer: "advanced",
-              ghost: true
-            },
-        tone: "current"
-      })}
-      <div class="stage-card ${getStageSurfaceClass(client, "preview")}" data-guide="preview">
-        <div class="preview-tabs" role="tablist" aria-label="Preview views">
-          ${previewTabs
-            .map(
-              (tab) => `
-                <button
-                  type="button"
-                  class="preview-tab${previewTab === tab.key ? " preview-tab-active" : ""}"
-                  data-preview-tab="${escapeHtml(tab.key)}"
-                >
-                  ${escapeHtml(tab.label)}
-                </button>
-              `
-            )
-            .join("")}
-        </div>
-
-        ${previewPane}
-
-        ${
-          recommendation
-            ? `
-              <div class="preview-support-strip">
-                <div class="preview-support-card">
-                  <span class="section-kicker">Strategy fit</span>
-                  <strong>${escapeHtml(recommendation.primaryOffer || client.businessName)}</strong>
-                  <p class="body-copy">${escapeHtml(truncateText(recommendation.positioning || "", 118))}</p>
-                </div>
-                <div class="preview-support-card preview-support-card-compact">
-                  <span class="section-kicker">Homepage structure</span>
-                  ${renderStructurePreview(recommendation.homepageStructure, true)}
-                </div>
-              </div>
-            `
-            : ""
-        }
-      </div>
-    </section>
-  `;
+function renderPreviewStage(client, options = {}) {
+  return renderWebsiteRevealStage(client, options);
 }
 
-function renderPublishStage(client) {
+function renderPublishStage(client, options = {}) {
+  const workspaceMode = options.workspaceMode === true;
   const runtime = getLumixRuntime(client);
   const publishEligibility = runtime.actions.publish_pack;
   const publishReadiness = getPublishReadiness(client);
   const status = getStepStatus(client, "publish");
+
+  if (workspaceMode) {
+    return `
+      <section class="workspace-stage-panel" data-guide="publish">
+        ${renderStageGate({
+          number: 5,
+          title: "Publish",
+          description: publishReadiness.ready
+            ? "Go live when the preview looks right."
+            : "Resolve the publish blocker before going live.",
+          readyItems: [
+            hasContent(client) ? "Content pack ready" : "",
+            client.publishTargets.length ? `${client.publishTargets.length} channel connected` : "",
+            client.publishHistory.length ? "Already published" : ""
+          ].filter(Boolean),
+          blocker: publishReadiness.ready ? "" : publishReadiness.text,
+          primaryAction: publishEligibility.ready
+            ? {
+                kind: "action",
+                label: "Publish",
+                action: "publish-all"
+              }
+            : {
+                kind: "focus",
+                label: hasContent(client) ? "Resolve blocker" : "Open preview",
+                target: hasContent(client) ? publishReadiness.target : "[data-guide='preview']"
+              },
+          secondaryAction: {
+            kind: "focus",
+            label: "Review preview",
+            target: "[data-guide='preview']",
+            ghost: true
+          },
+          tone: publishReadiness.ready ? (status === "completed" ? "completed" : "current") : "upcoming"
+        })}
+        <div class="stage-card ${getStageSurfaceClass(client, "publish")}">
+          <div class="publish-readiness-card publish-readiness-card-${publishReadiness.tone}">
+            <div class="publish-readiness-head">
+              <strong>${escapeHtml(publishReadiness.title)}</strong>
+              <span class="publish-readiness-badge">${escapeHtml(publishReadiness.ready ? "Ready" : "Blocked")}</span>
+            </div>
+            <p class="body-copy">${escapeHtml(publishReadiness.text)}</p>
+            <div class="publish-check-list">
+              <span class="publish-check-item ${hasContent(client) ? "publish-check-item-done" : ""}">Content pack</span>
+              <span class="publish-check-item ${client.publishTargets.length ? "publish-check-item-done" : ""}">Publish channel</span>
+              <span class="publish-check-item ${client.publishHistory.length ? "publish-check-item-done" : ""}">Go live</span>
+            </div>
+          </div>
+
+          ${
+            client.leads.length || client.analytics.leadSubmits
+              ? `
+                <details class="stage-subdetails">
+                  <summary>Recent leads</summary>
+                  <div class="mini-list">
+                    ${renderLeads(client.leads.slice(0, 3))}
+                  </div>
+                </details>
+              `
+              : ""
+          }
+        </div>
+      </section>
+    `;
+  }
 
   if (status === "upcoming" && !hasContent(client)) {
     return renderStageSummary({
@@ -2954,7 +3501,7 @@ function renderClientExtras(client) {
           </div>
 
           <details class="meta-box extra-actions-box ops-box debug-box">
-            <summary>Lumix debug</summary>
+            <summary>Lumi debug</summary>
             ${
               lumixAction
                 ? `
@@ -2979,7 +3526,7 @@ function renderClientExtras(client) {
                     }
                   </div>
                 `
-                : '<p class="body-copy">Ei viimeisintä Lumix-debugia vielä.</p>'
+                : '<p class="body-copy">Ei viimeisintä Lumi-debugia vielä.</p>'
             }
           </details>
         </div>
@@ -3022,15 +3569,19 @@ function renderEmptyWorkspace() {
       </div>
 
       <div class="next-step-card">
-        <span class="section-kicker">Lumix</span>
-        <strong>Lumix auttaa seuraavassa vaiheessa, mutta itse työ tehdään tässä workflow’ssa.</strong>
+        <span class="section-kicker">Lumi</span>
+        <strong>Lumi auttaa seuraavassa vaiheessa, mutta itse työ tehdään tässä workflow’ssa.</strong>
         <div class="stage-actions">
           <button type="button" class="ghost-button" data-open-drawer="new-client">+ New client</button>
-          <button type="button" class="ghost-button" data-empty-action="lumix">Käynnistä Lumix</button>
+          <button type="button" class="ghost-button" data-empty-action="lumix">Käynnistä Lumi</button>
         </div>
       </div>
     </article>
   `;
+
+  if (workspaceRail) {
+    workspaceRail.innerHTML = "";
+  }
 }
 
 function renderClientSelector(clients) {
@@ -3055,6 +3606,7 @@ function renderClientSelector(clients) {
   const activeId = state.activeClientId;
 
   clientsList.innerHTML = filteredClients
+    .slice(0, 6)
     .map(
       (client) => {
         const statusLabel = getCurrentFlowStep(client)?.title || "Valmis";
@@ -3076,31 +3628,231 @@ function renderClientSelector(clients) {
     .join("");
 }
 
-function renderActiveClient(client) {
-  activeClientView.innerHTML = `
-    <article class="panel workflow-card" data-client-id="${client.id}">
-      <div class="workflow-header">
+function renderDashboardWorkspace(client) {
+  return renderWebsiteRevealStage(client, { workspaceMode: true });
+}
+
+function renderClientWorkspace(client) {
+  const profile = client.businessProfile || {};
+
+  return `
+    <section class="workspace-main-card" data-guide="clients">
+      <div class="workspace-card-head">
         <div>
-          <span class="section-kicker">Aktiivinen asiakas</span>
+          <span class="section-kicker">Client</span>
+          <h3>${escapeHtml(client.businessName)}</h3>
+        </div>
+        <div class="workspace-card-actions">
+          <button type="button" class="ghost-button" data-sidebar-target="strategy">Open strategy</button>
+        </div>
+      </div>
+
+      <div class="workspace-client-grid">
+        <article class="workspace-client-brief">
+          <span class="section-kicker">Brief</span>
+          <strong>${escapeHtml(client.description || "No client brief yet.")}</strong>
+          <p class="body-copy">This is the core client context Lumi uses for setup, generation and publishing.</p>
+        </article>
+
+        <div class="workspace-client-facts">
+          <article class="workspace-fact-card">
+            <span>Business type</span>
+            <strong>${escapeHtml(getCatalogLabel("businessType", profile.businessType || "") || "Not selected")}</strong>
+          </article>
+          <article class="workspace-fact-card">
+            <span>Audience</span>
+            <strong>${escapeHtml(getCatalogLabel("audienceType", profile.audienceType || "") || "Not selected")}</strong>
+          </article>
+          <article class="workspace-fact-card">
+            <span>Goal</span>
+            <strong>${escapeHtml(getCatalogLabel("goalType", profile.goalType || "") || "Not selected")}</strong>
+          </article>
+          <article class="workspace-fact-card">
+            <span>Main CTA</span>
+            <strong>${escapeHtml(profile.mainCta || "Not set")}</strong>
+          </article>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderMainWorkspaceCard(client, section) {
+  if (section === "client") return renderClientWorkspace(client);
+  if (section === "strategy") return renderIntake(client, { workspaceMode: true });
+  if (section === "generate") return renderGenerateStage(client, { workspaceMode: true });
+  if (section === "preview") return renderPreviewStage(client, { workspaceMode: true });
+  if (section === "publish") return renderPublishStage(client, { workspaceMode: true });
+  return renderDashboardWorkspace(client);
+}
+
+function renderWorkspaceRail(client, section) {
+  const profile = client.businessProfile || {};
+  const assist = getLumixAssistState(client.id);
+  const runtime = getLumixRuntime(client);
+  const generating = Boolean(state.generatingClients[client.id]);
+  const hasWebsite = Boolean(client.website?.html);
+  const canGenerate = Boolean(runtime.actions.generate_pack.ready) || hasWebsite;
+  const canPublish = Boolean(runtime.actions.publish_pack.ready);
+  const tone =
+    getCatalogLabel("toneType", profile.toneType || "") ||
+    client.strategyRecommendation?.positioning ||
+    "Premium";
+  const goal =
+    getCatalogLabel("goalType", profile.goalType || "") ||
+    client.strategyRecommendation?.ctaStrategy ||
+    "Lead generation";
+  const headline = getWebsiteHeadline(client);
+  const cta = getWebsiteCta(client);
+  const quickPrompts = [
+    "Make the hero feel more premium.",
+    "Make the copy shorter and sharper.",
+    "Make the page more sales-focused.",
+    "Rewrite the CTA for higher intent leads."
+  ];
+
+  return `
+    <section class="rail-card rail-card-highlight reveal-control-card" data-client-id="${client.id}">
+      <div class="rail-card-head reveal-control-head">
+        <div>
+          <span class="section-kicker">Controls</span>
+          <strong>${escapeHtml(hasWebsite ? "Refine your website" : "Build your website")}</strong>
+        </div>
+        <span class="rail-badge rail-badge-ready">${escapeHtml(generating ? "Generating" : hasWebsite ? "Preview ready" : "Ready")}</span>
+      </div>
+
+      <div class="reveal-control-actions">
+        <button type="button" data-action="generate"${!canGenerate || generating ? " disabled" : ""}>
+          ${escapeHtml(hasWebsite ? "Regenerate" : "Generate website")}
+        </button>
+        <button type="button" class="ghost-button" data-copy-prompt="Rewrite the website copy to feel more premium."${generating ? " disabled" : ""}>
+          Edit copy
+        </button>
+        <button type="button" class="ghost-button" data-action="publish-all"${!canPublish ? " disabled" : ""}>
+          Publish
+        </button>
+      </div>
+
+      <div class="reveal-control-facts">
+        <article class="reveal-control-fact">
+          <span>Tone</span>
+          <strong>${escapeHtml(tone)}</strong>
+        </article>
+        <article class="reveal-control-fact">
+          <span>Goal</span>
+          <strong>${escapeHtml(goal)}</strong>
+        </article>
+        <article class="reveal-control-fact">
+          <span>Headline</span>
+          <strong>${escapeHtml(truncateText(headline, 72))}</strong>
+        </article>
+        <article class="reveal-control-fact">
+          <span>CTA</span>
+          <strong>${escapeHtml(truncateText(cta, 54))}</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="rail-card rail-card-compact reveal-copy-lab" data-client-id="${client.id}">
+      <div class="rail-card-head reveal-copy-head">
+        <div>
+          <span class="section-kicker">Copy lab</span>
+          <strong>Tweak without leaving the preview</strong>
+        </div>
+      </div>
+
+      <div class="reveal-quick-prompts">
+        ${quickPrompts
+          .map(
+            (prompt) => `
+              <button type="button" class="ghost-button reveal-quick-prompt" data-copy-prompt="${escapeHtml(prompt)}">
+                ${escapeHtml(prompt)}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <form class="reveal-copy-form" data-reveal-copy-form data-client-id="${client.id}">
+        <label>
+          <span>Ask Lumi to adjust the website</span>
+          <textarea
+            name="message"
+            rows="4"
+            placeholder="Make the hero feel more premium, shorten the subheadline and sharpen the CTA."
+            required
+          ></textarea>
+        </label>
+        <button type="submit"${generating ? " disabled" : ""}>Edit copy</button>
+      </form>
+
+      ${
+        assist.reply
+          ? `
+            <div class="reveal-assist-response">
+              <span class="section-kicker">Latest suggestion</span>
+              <p>${escapeHtml(assist.reply)}</p>
+            </div>
+          `
+          : `
+            <div class="reveal-assist-response reveal-assist-response-muted">
+              <span class="section-kicker">Live editing</span>
+              <p>Ask Lumi for sharper headlines, shorter copy or a more premium angle. The suggestion appears here instantly.</p>
+            </div>
+          `
+      }
+
+      <div class="reveal-publish-note">
+        <strong>${escapeHtml(hasWebsite ? "Preview first, publish when it feels right." : "Generate first, then inspect every section.")}</strong>
+        <p>${escapeHtml(canPublish ? "Your publish action stays here in the same control panel." : "Publishing unlocks as soon as the generated site and one destination are ready.")}</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderActiveClient(client) {
+  const section = getCurrentWorkspaceSection(client);
+  const headline = getWebsiteHeadline(client);
+  const subheadline = getWebsiteSubheadline(client);
+  const generating = Boolean(state.generatingClients[client.id]);
+
+  activeClientView.innerHTML = `
+    <article class="workflow-card workspace-canvas" data-client-id="${client.id}">
+      <section class="workspace-hero" data-guide="workspace">
+        <div class="workspace-hero-copy">
+          <span class="section-kicker">Website builder</span>
           <h2>${escapeHtml(client.businessName)}</h2>
-          <p class="body-copy">${escapeHtml(client.description)}</p>
+          <p class="workspace-hero-status">${escapeHtml(
+            generating
+              ? "Your website is being assembled in the preview."
+              : client.website?.html
+                ? "Preview the site, tune the copy and publish from one place."
+                : "Generate once and the preview becomes the product."
+          )}</p>
+          <p class="body-copy">${escapeHtml(truncateText(subheadline || headline, 120))}</p>
         </div>
-        <div class="workflow-header-meta">
-          <span class="client-status">${escapeHtml(client.billingStatus)}</span>
+
+        <div class="workspace-hero-meta">
+          <span class="workspace-hero-chip">${escapeHtml(client.website?.html ? "Website preview ready" : "Website preview")}</span>
+          <span class="workspace-hero-chip workspace-hero-chip-muted">${escapeHtml(
+            client.website?.html ? "Preview before publish" : "Generate to reveal the site"
+          )}</span>
         </div>
-      </div>
 
-      ${renderStickyStageHeader(client)}
+        <div class="workspace-hero-actions">
+          <button type="button" class="workflow-focus-button" data-action="generate"${generating ? " disabled" : ""}>
+            ${escapeHtml(client.website?.html ? "Regenerate" : "Generate website")}
+          </button>
+        </div>
+      </section>
 
-      <div class="workflow-stage-stack">
-        ${renderClientStage(client)}
-        ${renderIntake(client)}
-        ${renderGenerateStage(client)}
-        ${renderPreviewStage(client)}
-        ${renderPublishStage(client)}
-      </div>
+      ${renderMainWorkspaceCard(client, section)}
     </article>
   `;
+
+  if (workspaceRail) {
+    workspaceRail.innerHTML = "";
+  }
 }
 
 function render() {
@@ -3118,17 +3870,15 @@ function render() {
   renderLumixPanel();
 
   agencyTitle.textContent = `${state.bootstrap.user.agencyName}`;
-  const workspaceName = state.bootstrap.user.agencyName || "Lumix Workspace";
-  const userName = state.bootstrap.user.email || "Lumix User";
+  const workspaceName = state.bootstrap.user.agencyName || "EasyOnlinePresence Workspace";
+  const userName = getDisplayName(state.bootstrap.user.email || "") || "EasyOnlinePresence User";
   const roleLabel = state.bootstrap.user.role === "owner" ? "Workspace owner" : state.bootstrap.user.role;
   const activeClient = getActiveClient();
   const initials = getInitials(workspaceName, userName) || "LU";
 
   if (sidebarBrandTitle) sidebarBrandTitle.textContent = workspaceName;
   if (sidebarBrandSubtitle) {
-    sidebarBrandSubtitle.textContent = activeClient
-      ? `${getCurrentFlowStep(activeClient).title} is the active stage`
-      : "Guided marketing system";
+    sidebarBrandSubtitle.textContent = activeClient ? `Active: ${activeClient.businessName}` : "Current workspace";
   }
   if (sidebarUserName) sidebarUserName.textContent = userName;
   if (sidebarUserRole) sidebarUserRole.textContent = roleLabel;
@@ -3136,7 +3886,7 @@ function render() {
   if (iconRailAvatarLabel) iconRailAvatarLabel.textContent = initials;
   if (workspacePopoverTitle) workspacePopoverTitle.textContent = workspaceName;
   if (workspacePopoverName) workspacePopoverName.textContent = workspaceName;
-  if (workspacePopoverMeta) workspacePopoverMeta.textContent = `${clients.length} active client workspaces`;
+  if (workspacePopoverMeta) workspacePopoverMeta.textContent = `${clients.length} active client accounts`;
   if (profilePopoverName) profilePopoverName.textContent = userName;
 
   syncSidebarActiveState();
@@ -3393,7 +4143,6 @@ clientsList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-client-select]");
   if (!button) return;
   state.activeClientId = Number(button.dataset.clientSelect);
-  state.sidebarSection = "clients";
   render();
 });
 
@@ -3404,6 +4153,21 @@ flowRailList?.addEventListener("click", (event) => {
 });
 
 async function handleClientAreaSubmit(event) {
+  const copyForm = event.target.closest("form[data-reveal-copy-form]");
+  if (copyForm) {
+    event.preventDefault();
+
+    const clientId = Number(copyForm.dataset.clientId || copyForm.closest("[data-client-id]")?.dataset.clientId);
+    const raw = readForm(copyForm);
+
+    await runAction("Lumi muokkaa sivun copya...", async () => {
+      await requestLumixAssist(clientId, raw.message, "Lumi muokkaa sivun copya...");
+      copyForm.reset();
+      setStatus("Copy suggestion valmis. Tarkista ehdotus oikeasta paneelista.");
+    });
+    return true;
+  }
+
   const intakeForm = event.target.closest("form[data-intake-form]");
   if (intakeForm) {
     event.preventDefault();
@@ -3495,6 +4259,29 @@ async function handleClientAreaClick(event) {
     return true;
   }
 
+  const previewDeviceButton = event.target.closest("button[data-preview-device]");
+  if (previewDeviceButton) {
+    const root = previewDeviceButton.closest("[data-client-id]");
+    const clientId = Number(root?.dataset.clientId);
+    if (!clientId) return;
+    state.previewDevices[clientId] = previewDeviceButton.dataset.previewDevice;
+    render();
+    return true;
+  }
+
+  const quickPromptButton = event.target.closest("button[data-copy-prompt]");
+  if (quickPromptButton) {
+    const root = quickPromptButton.closest("[data-client-id]");
+    const clientId = Number(root?.dataset.clientId);
+    if (!clientId) return true;
+
+    await runAction("Lumi muokkaa sivun copya...", async () => {
+      await requestLumixAssist(clientId, quickPromptButton.dataset.copyPrompt || "");
+      setStatus("Copy suggestion valmis. Tarkista ehdotus oikeasta paneelista.");
+    });
+    return true;
+  }
+
   const button = event.target.closest("button[data-action]");
   if (!button) return false;
 
@@ -3506,6 +4293,8 @@ async function handleClientAreaClick(event) {
   const action = button.dataset.action;
 
   if (action === "generate") {
+    state.generatingClients[clientId] = true;
+    render();
     await runAction(`Generoidaan asiakkaalle ${client.businessName}...`, async () => {
       const result = await api(`/api/clients/${clientId}/generate-all`, { method: "POST" });
       if (result.lumixAction) {
@@ -3514,6 +4303,8 @@ async function handleClientAreaClick(event) {
       setStatus(`Sisältö generoitu asiakkaalle ${client.businessName}.`);
       await refresh();
     });
+    delete state.generatingClients[clientId];
+    render();
     return true;
   }
 
@@ -3611,11 +4402,19 @@ activeClientView.addEventListener("submit", (event) => {
   handleClientAreaSubmit(event);
 });
 
+workspaceRail?.addEventListener("submit", (event) => {
+  handleClientAreaSubmit(event);
+});
+
 clientAdvancedView?.addEventListener("submit", (event) => {
   handleClientAreaSubmit(event);
 });
 
 activeClientView.addEventListener("click", (event) => {
+  handleClientAreaClick(event);
+});
+
+workspaceRail?.addEventListener("click", (event) => {
   handleClientAreaClick(event);
 });
 
@@ -3635,19 +4434,9 @@ lumixCoach.addEventListener("submit", async (event) => {
   const clientId = Number(form.dataset.clientId);
   const raw = readForm(form);
 
-  await runAction("Lumix miettii ideaa...", async () => {
-    const result = await api(`/api/clients/${clientId}/lumix-assist`, {
-      method: "POST",
-      body: JSON.stringify({ message: raw.message })
-    });
-
-    lumixAssistState.set(clientId, {
-      reply: result.assist?.reply || "",
-      suggestedUpdates: result.assist?.suggestedUpdates || null
-    });
-
+  await runAction("Lumi miettii ideaa...", async () => {
+    await requestLumixAssist(clientId, raw.message);
     form.reset();
-    renderCoach(getActiveClient());
   });
 });
 
@@ -3683,7 +4472,7 @@ lumixCoach.addEventListener("click", (event) => {
     const assist = getLumixAssistState(activeClient.id);
     const updates = assist.suggestedUpdates || {};
 
-    runAction("Lumix päivittää ehdotusta asiakkaalle...", async () => {
+    runAction("Lumi päivittää ehdotusta asiakkaalle...", async () => {
       const intakePayload = buildIntakePayloadFromClient(activeClient, updates);
       await api(`/api/clients/${activeClient.id}/intake`, {
         method: "PUT",
@@ -3697,7 +4486,7 @@ lumixCoach.addEventListener("click", (event) => {
         });
       }
 
-      setStatus("Lumixin ehdotus lisättiin asiakkaan tietoihin.");
+      setStatus("Lumin ehdotus lisättiin asiakkaan tietoihin.");
       await refresh();
     });
     return;
