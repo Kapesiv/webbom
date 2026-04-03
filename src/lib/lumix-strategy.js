@@ -129,6 +129,31 @@ function buildDemoStrategy(recommendation) {
   });
 }
 
+function buildOpenRouterJsonPrompt(prompt) {
+  return `${prompt}\n\nReturn only valid JSON. Do not use markdown fences. Do not add any explanation before or after the JSON.`;
+}
+
+function parseJsonOutput(outputText) {
+  const text = String(outputText || "").trim();
+
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    return JSON.parse(fencedMatch[1].trim());
+  }
+
+  const objectStart = text.indexOf("{");
+  const objectEnd = text.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return JSON.parse(text.slice(objectStart, objectEnd + 1));
+  }
+
+  throw new Error("Model did not return valid JSON.");
+}
+
 export async function generateAndSaveStrategy(database, clientId) {
   const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow) {
@@ -148,27 +173,43 @@ export async function generateAndSaveStrategy(database, clientId) {
   }
 
   const apiKey = getOpenAiApiKey();
-  const model = process.env.OPENAI_STRATEGY_MODEL || process.env.OPENAI_MODEL || "gpt-5-mini";
+  const baseURL = process.env.OPENAI_BASE_URL;
+  const model = process.env.OPENAI_STRATEGY_MODEL || process.env.OPENAI_MODEL || "openai/gpt-4o-mini";
+  const isOpenRouter = baseURL?.includes("openrouter.ai");
   let strategy;
 
   if (!apiKey) {
     strategy = buildDemoStrategy(actionResult.recommendation);
   } else {
-    const openai = new OpenAI({ apiKey });
-    const response = await openai.responses.create({
-      model,
-      input: buildStrategyPrompt(client, actionResult.recommendation),
-      text: {
-        format: {
-          type: "json_schema",
-          name: "lumix_strategy",
-          strict: true,
-          schema: strategySchema
-        }
-      }
-    });
-
-    const parsed = JSON.parse(response.output_text);
+    const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+    const prompt = buildStrategyPrompt(client, actionResult.recommendation);
+    const parsed = isOpenRouter
+      ? parseJsonOutput(
+        (
+          await openai.chat.completions.create({
+            model,
+            max_tokens: 400,
+            messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
+          })
+        ).choices[0]?.message?.content || ""
+      )
+      : parseJsonOutput(
+          (
+            await openai.responses.create({
+              model,
+              max_output_tokens: 400,
+              input: prompt,
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "lumix_strategy",
+                  strict: true,
+                  schema: strategySchema
+                }
+              }
+            })
+          ).output_text
+        );
     strategy = validateStrategy({
       ...parsed,
       version: "v1",

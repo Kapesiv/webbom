@@ -98,6 +98,27 @@ function sanitizeHtml(html) {
     .replace(/javascript:/gi, "");
 }
 
+function parseJsonOutput(outputText) {
+  const text = String(outputText || "").trim();
+
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    return JSON.parse(fencedMatch[1].trim());
+  }
+
+  const objectStart = text.indexOf("{");
+  const objectEnd = text.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return JSON.parse(text.slice(objectStart, objectEnd + 1));
+  }
+
+  throw new Error("Model did not return valid JSON.");
+}
+
 function buildPrompt({ businessName, description, plan, customPrompt }) {
   const lines = [
     buildLumixPromptHeader(),
@@ -107,6 +128,9 @@ function buildPrompt({ businessName, description, plan, customPrompt }) {
     "- The landing page HTML must use semantic HTML inside one wrapper div.",
     "- No scripts, no styles, no markdown.",
     "- Include a hero, 3 benefit blocks, 1 proof section, and 1 CTA section.",
+    "- The page should feel like a premium dark analytics dashboard instead of a generic startup landing page.",
+    "- Keep the structure compact, high-contrast, and card-based.",
+    "- Use meaningful class names when helpful, for example hero, feature-grid, proof-strip, metric-row, and cta-panel.",
     "- SEO title must be under 60 characters.",
     "- Meta description must be under 160 characters.",
     "- Blog posts should target commercial-intent organic search.",
@@ -133,7 +157,7 @@ function buildStrategyOverlay(strategyRecommendation) {
     : "";
 
   return [
-    "Approved Lumix strategy to follow:",
+    "Approved EasyOnlinePresence strategy to follow:",
     `- Positioning: ${strategy.positioning || ""}`,
     `- Primary offer: ${strategy.primaryOffer || ""}`,
     `- Primary audience: ${strategy.primaryAudience || ""}`,
@@ -148,7 +172,7 @@ function buildStrategyOverlay(strategyRecommendation) {
 function buildLumixAssistPrompt({ client, message }) {
   return [
     buildLumixPromptHeader(),
-    "You are answering inside the Lumix mini assistant in the Lumix app.",
+    "You are answering inside the EasyOnlinePresence mini assistant in the EasyOnlinePresence app.",
     "Reply in Finnish.",
     "Be concise, practical, and helpful.",
     "If the user's idea implies better profile settings, return them in suggestedUpdates.",
@@ -160,6 +184,10 @@ function buildLumixAssistPrompt({ client, message }) {
     "",
     `User idea: ${message}`
   ].join("\n");
+}
+
+function buildOpenRouterJsonPrompt(prompt) {
+  return `${prompt}\n\nReturn only valid JSON. Do not use markdown fences. Do not add any explanation before or after the JSON.`;
 }
 
 function buildDemoLumixAssistResponse({ client, message }) {
@@ -194,7 +222,7 @@ function buildDemoLumixAssistResponse({ client, message }) {
   }
 
   suggestedUpdates.notes = message;
-  suggestedUpdates.customPrompt = `Lumix-idea käyttäjältä: ${message}`;
+  suggestedUpdates.customPrompt = `EasyOnlinePresence-idea käyttäjältä: ${message}`;
 
   const summary =
     notes.length > 0
@@ -221,13 +249,27 @@ function buildDemoResponse({ businessName, description }) {
       cta: "Varaa strategiapalaveri",
       html: sanitizeHtml(`
         <div class="generated-site">
-          <section>
-            <p class="eyebrow">Lumix</p>
+          <section class="hero">
+            <p class="eyebrow">EasyOnlinePresence</p>
             <h1>${safeName}</h1>
             <p>${safeDescription}</p>
             <a href="#contact">Varaa demo</a>
+            <div class="feature-grid">
+              <article>
+                <h3>Primary offer</h3>
+                <p>Selkea tarjous, nopea suunta ja yksi paakonversio.</p>
+              </article>
+              <article>
+                <h3>SEO-ready</h3>
+                <p>Hakukonenakyvyytta tukeva rakenne ilman ylimaarista kohinaa.</p>
+              </article>
+              <article>
+                <h3>Lead path</h3>
+                <p>Yhteydenotto johdetaan suoraan oikeaan seuraavaan askeleeseen.</p>
+              </article>
+            </div>
           </section>
-          <section>
+          <section class="proof-strip">
             <h2>Mita asiakas saa joka kuukausi</h2>
             <div class="feature-grid">
               <article>
@@ -244,13 +286,14 @@ function buildDemoResponse({ businessName, description }) {
               </article>
             </div>
           </section>
-          <section>
+          <section class="metric-row">
             <h2>Nopea tie liideihin</h2>
             <p>Yksi selkea sivu ja jatkuva julkaisutahti voittavat usein sekavan markkinointipinon.</p>
           </section>
-          <section id="contact">
+          <section id="contact" class="cta-panel">
             <h2>Seuraava askel</h2>
             <p>Automatisoi sisalto, seuraa konversioita ja iteratoi kuukausittain.</p>
+            <a href="#contact">Pyydä tarjous</a>
           </section>
         </div>
       `)
@@ -292,29 +335,45 @@ function buildDemoResponse({ businessName, description }) {
 }
 
 export function createAgencyService() {
-  const model = process.env.OPENAI_MODEL || "gpt-5-mini";
+  const baseURL = process.env.OPENAI_BASE_URL;
+  const model = process.env.OPENAI_MODEL || "openai/gpt-4o-mini";
   const apiKey = getOpenAiApiKey();
-  const client = apiKey ? new OpenAI({ apiKey }) : null;
+  const client = apiKey ? new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) }) : null;
+  const isOpenRouter = baseURL?.includes("openrouter.ai");
 
   async function generatePack({ businessName, description, plan = "starter", customPrompt = "" }) {
     if (!client) {
       return buildDemoResponse({ businessName, description });
     }
 
-    const response = await client.responses.create({
-      model,
-      input: buildPrompt({ businessName, description, plan, customPrompt }),
-      text: {
-        format: {
-          type: "json_schema",
-          name: "agency_pack",
-          strict: true,
-          schema: generationSchema
-        }
-      }
-    });
-
-    const parsed = JSON.parse(response.output_text);
+    const prompt = buildPrompt({ businessName, description, plan, customPrompt });
+    const parsed = isOpenRouter
+      ? parseJsonOutput(
+          (
+            await client.chat.completions.create({
+              model,
+              max_tokens: 400,
+              messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
+            })
+          ).choices[0]?.message?.content || ""
+        )
+      : parseJsonOutput(
+          (
+            await client.responses.create({
+              model,
+              max_output_tokens: 4000,
+              input: prompt,
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "agency_pack",
+                  strict: true,
+                  schema: generationSchema
+                }
+              }
+            })
+          ).output_text
+        );
 
     return {
       mode: "live",
@@ -353,20 +412,34 @@ export function createAgencyService() {
       return buildDemoLumixAssistResponse({ client: currentClient, message });
     }
 
-    const response = await client.responses.create({
-      model,
-      input: buildLumixAssistPrompt({ client: currentClient, message }),
-      text: {
-        format: {
-          type: "json_schema",
-          name: "lumix_assist",
-          strict: true,
-          schema: lumixAssistSchema
-        }
-      }
-    });
-
-    const parsed = JSON.parse(response.output_text);
+    const prompt = buildLumixAssistPrompt({ client: currentClient, message });
+    const parsed = isOpenRouter
+      ? parseJsonOutput(
+          (
+            await client.chat.completions.create({
+              model,
+              max_tokens: 250,
+              messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
+            })
+          ).choices[0]?.message?.content || ""
+        )
+      : parseJsonOutput(
+          (
+            await client.responses.create({
+              model,
+              max_output_tokens: 250,
+              input: prompt,
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "lumix_assist",
+                  strict: true,
+                  schema: lumixAssistSchema
+                }
+              }
+            })
+          ).output_text
+        );
     return {
       mode: "live",
       ...parsed
