@@ -130,9 +130,23 @@ function normalizeAssistPayload(parsed) {
     return parsed;
   }
 
+  const suggestedUpdates =
+    parsed?.suggestedUpdates && typeof parsed.suggestedUpdates === "object"
+      ? parsed.suggestedUpdates
+      : {};
   const content = parsed?.content;
   if (!content || typeof content !== "object") {
-    return parsed;
+    const suggestionSummary = Object.entries(suggestedUpdates)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(", ");
+
+    return {
+      ...parsed,
+      reply: suggestionSummary
+        ? `Suosittelen näitä päivityksiä: ${suggestionSummary}.`
+        : "Tässä on ehdotus seuraavaan parannukseen. Tarkista päivitykset ja sovella tarvittaessa.",
+      suggestedUpdates
+    };
   }
 
   const parts = [content.headline, content.subheadline, content.body].filter(Boolean);
@@ -150,7 +164,7 @@ function normalizeAssistPayload(parsed) {
   return {
     ...parsed,
     reply: parts.join("\n\n"),
-    suggestedUpdates: parsed.suggestedUpdates || {}
+    suggestedUpdates
   };
 }
 
@@ -220,7 +234,7 @@ function buildStrategyOverlay(strategyRecommendation) {
     : "";
 
   return [
-    "Approved EasyOnlinePresence strategy to follow:",
+    "Approved Lumi strategy to follow:",
     `- Positioning: ${strategy.positioning || ""}`,
     `- Primary offer: ${strategy.primaryOffer || ""}`,
     `- Primary audience: ${strategy.primaryAudience || ""}`,
@@ -235,7 +249,7 @@ function buildStrategyOverlay(strategyRecommendation) {
 function buildLumixAssistPrompt({ client, message }) {
   return [
     buildLumixPromptHeader(),
-    "You are answering inside the EasyOnlinePresence mini assistant in the EasyOnlinePresence app.",
+    "You are answering inside the Lumi mini assistant in the EasyOnlinePresence app.",
     "Reply in Finnish.",
     "Be concise, practical, and helpful.",
     "If the user's idea implies better profile settings, return them in suggestedUpdates.",
@@ -285,7 +299,7 @@ function buildDemoLumixAssistResponse({ client, message }) {
   }
 
   suggestedUpdates.notes = message;
-  suggestedUpdates.customPrompt = `EasyOnlinePresence-idea käyttäjältä: ${message}`;
+  suggestedUpdates.customPrompt = `Lumi-idea käyttäjältä: ${message}`;
 
   const summary =
     notes.length > 0
@@ -313,7 +327,7 @@ function buildDemoResponse({ businessName, description }) {
       html: sanitizeHtml(`
         <div class="generated-site">
           <section class="hero">
-            <p class="eyebrow">EasyOnlinePresence</p>
+            <p class="eyebrow">Lumi</p>
             <h1>${safeName}</h1>
             <p>${safeDescription}</p>
             <a href="#contact">Varaa demo</a>
