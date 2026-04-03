@@ -135,6 +135,12 @@ function buildOpenRouterJsonPrompt(prompt) {
 
 function parseJsonOutput(outputText) {
   const text = String(outputText || "").trim();
+  const parseWithRepairs = (value) =>
+    JSON.parse(
+      String(value)
+        .replace(/,\s*([}\]])/g, "$1")
+        .trim()
+    );
 
   try {
     return JSON.parse(text);
@@ -148,10 +154,10 @@ function parseJsonOutput(outputText) {
   const objectStart = text.indexOf("{");
   const objectEnd = text.lastIndexOf("}");
   if (objectStart >= 0 && objectEnd > objectStart) {
-    return JSON.parse(text.slice(objectStart, objectEnd + 1));
+    return parseWithRepairs(text.slice(objectStart, objectEnd + 1));
   }
 
-  throw new Error("Model did not return valid JSON.");
+  return parseWithRepairs(text);
 }
 
 export async function generateAndSaveStrategy(database, clientId) {
