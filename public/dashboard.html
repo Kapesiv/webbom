@@ -20,14 +20,18 @@
       <section class="guided-workspace">
         <header class="guided-topbar">
           <div class="guided-topbar-copy">
-            <span class="guided-kicker">Guided workflow</span>
+            <span class="guided-kicker" id="guided-kicker">Guided workflow</span>
             <h1 id="guided-workspace-name">Lumix Workspace</h1>
           </div>
 
           <div class="guided-topbar-actions">
+            <div class="guided-lang-switch" aria-label="Language switcher">
+              <a href="/dashboard?lang=en" class="guided-lang-button" data-lang-button="en">EN</a>
+              <a href="/dashboard?lang=fi" class="guided-lang-button" data-lang-button="fi">FI</a>
+            </div>
             <button id="guided-new-website" class="guided-secondary-button" type="button">New website</button>
             <label class="guided-client-select-wrap" aria-label="Select active client">
-              <span>Client</span>
+              <span id="guided-client-label">Client</span>
               <select id="guided-client-switcher"></select>
             </label>
             <button id="guided-logout" class="guided-topbar-link" type="button">Log out</button>

@@ -97,6 +97,12 @@
         gap: 14px;
       }
 
+      .top-row-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
       .brand {
         display: inline-flex;
         align-items: center;
@@ -140,6 +146,38 @@
       }
 
       .back-link:hover {
+        color: var(--ink);
+      }
+
+      .lang-switch {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .lang-button {
+        min-width: 42px;
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 10px;
+        color: var(--muted);
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .lang-button + .lang-button {
+        border-left: 1px solid var(--line);
+      }
+
+      .lang-button.is-active {
+        background: rgba(255, 255, 255, 0.08);
         color: var(--ink);
       }
 
@@ -405,41 +443,47 @@
               <span class="brand-mark" aria-hidden="true"></span>
               <span class="brand-name">EasyOnlinePresence</span>
             </a>
-            <a href="/" class="back-link">Back to site</a>
+            <div class="top-row-actions">
+              <div class="lang-switch" aria-label="Language switcher">
+                <a href="/register?lang=en" class="lang-button" data-lang-button="en">EN</a>
+                <a href="/register?lang=fi" class="lang-button" data-lang-button="fi">FI</a>
+              </div>
+              <a href="/" class="back-link" id="register-back-link">Back to site</a>
+            </div>
           </div>
 
           <div>
-            <span class="eyebrow">Create workspace</span>
-            <h1>Open your first preview-ready studio.</h1>
-            <p class="copy">Create an account, define the workspace, and start turning business input into a premium site direction.</p>
+            <span class="eyebrow" id="register-eyebrow">Create workspace</span>
+            <h1 id="register-title">Open your first preview-ready studio.</h1>
+            <p class="copy" id="register-copy">Create an account, define the workspace, and start turning business input into a premium site direction.</p>
           </div>
 
           <div class="card">
             <form id="register-form" method="POST" action="/register">
               <div class="field">
-                <label for="agencyName">Workspace name</label>
+                <label for="agencyName" id="register-agency-label">Workspace name</label>
                 <input id="agencyName" name="agencyName" placeholder="Northbound Growth" required />
               </div>
 
               <div class="field">
-                <label for="email">Email</label>
+                <label for="email" id="register-email-label">Email</label>
                 <input id="email" name="email" type="email" placeholder="owner@example.com" required />
               </div>
 
               <div class="field">
-                <label for="password">Password</label>
+                <label for="password" id="register-password-label">Password</label>
                 <input id="password" name="password" type="password" placeholder="At least 8 characters" required />
               </div>
 
-              <button class="button" type="submit">Create account</button>
+              <button class="button" id="register-submit" type="submit">Create account</button>
             </form>
           </div>
 
           <p id="status-banner" class="status" aria-live="polite"></p>
 
           <p class="foot">
-            Already have an account?
-            <a href="/login">Log in</a>
+            <span id="register-foot-copy">Already have an account?</span>
+            <a href="/login" id="register-foot-link">Log in</a>
           </p>
         </div>
       </section>

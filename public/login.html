@@ -97,6 +97,12 @@
         gap: 14px;
       }
 
+      .top-row-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
       .brand {
         display: inline-flex;
         align-items: center;
@@ -140,6 +146,38 @@
       }
 
       .back-link:hover {
+        color: var(--ink);
+      }
+
+      .lang-switch {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .lang-button {
+        min-width: 42px;
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 10px;
+        color: var(--muted);
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .lang-button + .lang-button {
+        border-left: 1px solid var(--line);
+      }
+
+      .lang-button.is-active {
+        background: rgba(255, 255, 255, 0.08);
         color: var(--ink);
       }
 
@@ -416,41 +454,47 @@
               <span class="brand-mark" aria-hidden="true"></span>
               <span class="brand-name">EasyOnlinePresence</span>
             </a>
-            <a href="/" class="back-link">Back to site</a>
+            <div class="top-row-actions">
+              <div class="lang-switch" aria-label="Language switcher">
+                <a href="/login?lang=en" class="lang-button" data-lang-button="en">EN</a>
+                <a href="/login?lang=fi" class="lang-button" data-lang-button="fi">FI</a>
+              </div>
+              <a href="/" class="back-link" id="login-back-link">Back to site</a>
+            </div>
           </div>
 
           <div>
-            <span class="eyebrow">Workspace access</span>
-            <h1>Step back into the studio.</h1>
-            <p class="copy">Open your website previews, content direction, and SEO workflow from one place.</p>
+            <span class="eyebrow" id="login-eyebrow">Workspace access</span>
+            <h1 id="login-title">Step back into the studio.</h1>
+            <p class="copy" id="login-copy">Open your website previews, content direction, and SEO workflow from one place.</p>
           </div>
 
           <div class="card">
             <form id="login-form" method="POST" action="/login">
               <div class="field">
-                <label for="email">Email</label>
+                <label for="email" id="login-email-label">Email</label>
                 <input id="email" name="email" type="email" placeholder="you@example.com" required />
               </div>
 
               <div class="field">
-                <label for="password">Password</label>
+                <label for="password" id="login-password-label">Password</label>
                 <input id="password" name="password" type="password" placeholder="Enter your password" required />
               </div>
 
               <div class="row">
-                <span>Secure workspace login</span>
-                <a href="#">Forgot password?</a>
+                <span id="login-row-copy">Secure workspace login</span>
+                <a href="#" id="login-forgot-link">Forgot password?</a>
               </div>
 
-              <button class="button" type="submit">Continue to dashboard</button>
+              <button class="button" id="login-submit" type="submit">Continue to dashboard</button>
             </form>
           </div>
 
           <p id="status-banner" class="status" aria-live="polite"></p>
 
           <p class="foot">
-            New here?
-            <a href="/register">Create an account</a>
+            <span id="login-foot-copy">New here?</span>
+            <a href="/register" id="login-foot-link">Create an account</a>
           </p>
         </div>
       </section>
