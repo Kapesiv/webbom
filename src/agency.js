@@ -152,6 +152,8 @@ const lumixAssistSchema = {
   required: ["reply", "suggestedUpdates"]
 };
 
+const FIXED_TEMPLATE_SECTIONS = ["Services", "Proof", "Process", "Contact"];
+
 const designFamilies = [
   {
     id: "product-command",
@@ -411,6 +413,54 @@ function buildOfferReference(strategy, description, fallback = "specialist servi
   return fallback;
 }
 
+function looksPlaceholderName(value) {
+  const text = normalizeText(value);
+  if (!text) return true;
+  return /^(john|jane|james|name|client name|owner name|company name|business name|your name|lorem|ipsum)/.test(text);
+}
+
+function looksGenericBusinessCopy(value) {
+  const text = normalizeText(value);
+  if (!text) return true;
+
+  const bannedPhrases = [
+    "ai-generated",
+    "ai powered",
+    "ai-powered",
+    "next-gen",
+    "future-ready",
+    "intelligent platform",
+    "revolutionary",
+    "preview",
+    "mockup",
+    "template",
+    "design system",
+    "visual hierarchy",
+    "premium feel",
+    "publishable website",
+    "website direction",
+    "concept",
+    "new website",
+    "placeholder",
+    "spacious composition",
+    "image-led",
+    "editorial rhythm",
+    "cinematic",
+    "art direction"
+  ];
+
+  if (bannedPhrases.some((phrase) => text.includes(phrase))) return true;
+  if (/^(lorem ipsum|coming soon|insert|tbd|n\/a)$/.test(text)) return true;
+
+  return false;
+}
+
+function preferSpecificText(value, fallback) {
+  const current = String(value || "").trim();
+  if (!current) return fallback;
+  return looksGenericBusinessCopy(current) ? fallback : current;
+}
+
 function sanitizeHtml(html) {
   return String(html)
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
@@ -527,14 +577,21 @@ function inferWebsiteArchetype(input = {}) {
 
   const businessType = input.context?.businessProfile?.businessType || "";
 
-  if (/tattoo|blackwork|piercing|ink/.test(signalText)) return "tattoo-studio";
-  if (/sauna|steam|retreat cabin|spa install/.test(signalText)) return "sauna-studio";
-  if (/wellness|spa|massage|skin|beauty|therapy|clinic/.test(signalText)) return "wellness";
-  if (/hotel|restaurant|cafe|bar|guest|dining|reservation/.test(signalText)) return "hospitality";
-  if (/shop|store|product|collection|shipping|retail/.test(signalText)) return "commerce";
-  if (/saas|software|app|platform|automation|analytics/.test(signalText)) return "saas";
-  if (/designer|photography|artist|studio|branding|creator|production|portfolio/.test(signalText)) return "creative-studio";
-  if (/law|legal|consulting|advisory|finance|accounting|agency|expert/.test(signalText)) return "professional-service";
+  if (/\bcleaning\b|\bcleaner\b|\bjanitorial\b|\bhousekeeping\b|\bdeep clean\b|\bhome clean(ing)?\b|\boffice clean(ing)?\b|\bmove-out clean(ing)?\b/.test(signalText)) {
+    return "cleaning-service";
+  }
+  if (/\btattoo\b|\bblackwork\b|\bpiercing\b|\bink\b/.test(signalText)) return "tattoo-studio";
+  if (/\bsauna\b|\bsteam\b|\bretreat cabin\b|\bspa install/.test(signalText)) return "sauna-studio";
+  if (/\bwellness\b|\bspa\b|\bmassage\b|\bskin\b|\bbeauty\b|\btherapy\b|\bclinic\b/.test(signalText)) return "wellness";
+  if (/\bhotel\b|\brestaurant\b|\bcafe\b|\bbar\b|\bguest\b|\bdining\b|\breservation\b/.test(signalText)) return "hospitality";
+  if (/\bshop\b|\bstore\b|\bproduct\b|\bcollection\b|\bshipping\b|\bretail\b/.test(signalText)) return "commerce";
+  if (/\bsaas\b|\bsoftware\b|\bapp\b|\bplatform\b|\bautomation\b|\banalytics\b/.test(signalText)) return "saas";
+  if (/\bdesigner\b|\bphotography\b|\bartist\b|\bstudio\b|\bbranding\b|\bcreator\b|\bproduction\b|\bportfolio\b/.test(signalText)) {
+    return "creative-studio";
+  }
+  if (/\blaw\b|\blegal\b|\bconsulting\b|\badvisory\b|\bfinance\b|\baccounting\b|\bagency\b|\bexpert\b/.test(signalText)) {
+    return "professional-service";
+  }
   if (businessType === "b2b_service") return "professional-service";
   if (businessType === "wellness_beauty") return "wellness";
   if (businessType === "ecommerce") return "commerce";
@@ -548,6 +605,8 @@ function buildArchetypePrompt(archetype) {
       "Business-specific realism: write like a premium tattoo studio website. Focus on artists, tattoo styles, consultation, booking flow, hygiene, and aftercare. Avoid vague creative-studio filler.",
     "sauna-studio":
       "Business-specific realism: write like a sauna design and installation website. Focus on custom sauna design, materials, installation planning, gallery-worthy results, consultation, and project flow.",
+    "cleaning-service":
+      "Business-specific realism: write like a real cleaning service website. Focus on home or office cleaning services, recurring visits, deep cleans, trust, pricing clarity, insured staff, and a direct contact path.",
     wellness:
       "Business-specific realism: write like a premium wellness or beauty website. Focus on treatments, experience, safety, booking confidence, and return visits.",
     hospitality:
@@ -600,13 +659,13 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
     testimonials: [
       {
         quote: "The new site finally explains what we do clearly and makes it much easier for the right people to contact us.",
-        name: "Mika Laakso",
-        role: "Client"
+        name: "Service client",
+        role: "Completed project"
       },
       {
-        quote: "We wanted something that felt more credible and more polished. The result finally feels ready to publish.",
-        name: "Sanna Virtanen",
-        role: "Client"
+        quote: "We wanted something that felt more credible and more polished. The result finally feels like the business we run.",
+        name: "Returning customer",
+        role: "Repeat service client"
       }
     ],
     processTitle: "How it works",
@@ -659,12 +718,12 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
       testimonials: [
         {
           quote: "The site made the style, the artists, and the booking process clear straight away. It finally feels like the studio in real life.",
-          name: "Jenna H.",
+          name: "Tattoo client",
           role: "Blackwork client"
         },
         {
           quote: "I knew what to expect before I booked. That made the decision much easier.",
-          name: "Miro L.",
+          name: "Consultation client",
           role: "Custom piece client"
         }
       ],
@@ -700,12 +759,12 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
       testimonials: [
         {
           quote: "The new site makes the work feel high-end and practical at the same time. It finally looks like the projects we deliver.",
-          name: "Tuomas R.",
+          name: "Residential client",
           role: "Residential client"
         },
         {
           quote: "It is much easier to show the difference in materials, process, and finish now.",
-          name: "Elina P.",
+          name: "Project client",
           role: "Project client"
         }
       ],
@@ -721,18 +780,68 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
     };
   }
 
+  if (archetype === "cleaning-service") {
+    return {
+      ...base,
+      heroKicker: "Cleaning service",
+      headline: `${businessName} keeps homes and workspaces clean with clear service options and easy booking.`,
+      subheadline: "Show what is included, who the service is for, and how to request a quote without digging through generic copy.",
+      cta: "Request a cleaning quote",
+      secondaryCta: "See cleaning services",
+      servicesTitle: "Cleaning services",
+      servicesIntro: "People contact cleaning companies faster when the service list, pricing approach, and trust signals are easy to understand.",
+      services: [
+        {
+          title: "Recurring home cleaning",
+          body: "Regular weekly or bi-weekly cleans that keep the home consistently tidy without extra back and forth."
+        },
+        {
+          title: "Deep cleaning and move-out cleans",
+          body: "One-off visits for seasonal cleaning, move-out handovers, and homes that need a more thorough reset."
+        },
+        {
+          title: "Office and commercial cleaning",
+          body: "Reliable cleaning plans for workspaces that need a professional standard and a clear contact person."
+        }
+      ],
+      proofTitle: "Why clients stay with the service",
+      proofIntro: "Cleaning websites work better when they show exactly what is offered, how trust is handled, and how quickly a quote can be requested.",
+      testimonials: [
+        {
+          quote: "The service list was clear and the quote process was straightforward. We knew what was included before we even called.",
+          name: "Home cleaning client",
+          role: "Weekly service"
+        },
+        {
+          quote: "It finally feels easy to explain the difference between recurring cleaning and one-off deep cleans.",
+          name: "Office cleaning client",
+          role: "Commercial contract"
+        }
+      ],
+      processTitle: "How booking works",
+      processIntro: "A simple cleaning-service process helps people understand the next step before they contact you.",
+      processSteps: [
+        { title: "Tell us what needs cleaning", body: "Share the property type, size, frequency, and whether you need recurring or one-off cleaning." },
+        { title: "Receive a clear quote", body: "We confirm what is included, the expected visit scope, and the best next booking option." },
+        { title: "Confirm the visit", body: "Choose the right time, approve the booking, and get practical details before the cleaning starts." }
+      ],
+      ctaHeadline: "Need a cleaner home or workspace?",
+      ctaBody: "Request a quote and we will come back with the right service option for your property."
+    };
+  }
+
   if (archetype === "local-service") {
     return {
       ...base,
       heroKicker: "Local service business",
-      headline: `${businessName} makes it easier to get the right help without the usual back and forth.`,
-      subheadline: "A stronger service website should explain what you do, who it is for, and how to get a quote or booking in one clean pass.",
+      headline: `${businessName} helps local clients get the right service without unnecessary back and forth.`,
+      subheadline: "Clear service descriptions, a simple process, and one direct quote request help new enquiries move faster.",
       cta: "Request a quote",
       secondaryCta: "See services",
       servicesTitle: "What we help with",
-      servicesIntro: "Good local service pages turn interest into contact by making the offer and the next step obvious.",
+      servicesIntro: "Clients get in touch faster when the service, fit, and next step are clear from the first screen.",
       processTitle: "How the service works",
-      processIntro: "A simple process helps clients know what happens after they get in touch."
+      processIntro: "Show exactly what happens after the first message so people can move forward with confidence."
     };
   }
 
@@ -740,12 +849,12 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
     return {
       ...base,
       heroKicker: "Professional service",
-      headline: `${businessName} offers expert guidance with the clarity serious clients expect before they enquire.`,
-      subheadline: "A stronger service website should explain the offer, show credibility early, and make the first conversation easier to start.",
+      headline: `${businessName} gives clients clear expert guidance before the first call even starts.`,
+      subheadline: "Explain the offer, build credibility early, and make the first conversation easier to begin.",
       cta: "Request a consultation",
       secondaryCta: "See how we work",
       servicesTitle: "Offer overview",
-      servicesIntro: "Professional service websites work best when the value proposition is clear before the call.",
+      servicesIntro: "Decision-makers move faster when the offer is specific, credible, and easy to understand.",
       proofTitle: "Built for credibility",
       proofIntro: "Trust comes from specificity, confidence, and a believable next step."
     };
@@ -791,12 +900,12 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
     return {
       ...base,
       heroKicker: "Software product",
-      headline: `${businessName} helps teams move faster with a clearer product story and a stronger first impression.`,
-      subheadline: "A publishable product site should explain the use case, prove the value, and point to one serious next step.",
+      headline: `${businessName} helps teams understand the product, the value, and the next step faster.`,
+      subheadline: "Show the use case clearly, explain who the product is for, and lead serious buyers into a demo or sales conversation.",
       cta: "Book a demo",
       secondaryCta: "See product overview",
       servicesTitle: "Product overview",
-      servicesIntro: "The strongest software websites show what the product does, who it helps, and why it is worth a closer look.",
+      servicesIntro: "Strong product pages explain what the software does, who it helps, and why it is worth a closer look.",
       proofTitle: "Proof that feels credible",
       proofIntro: "Decision-makers move faster when the message is sharp, the structure is useful, and the CTA is hard to miss.",
       processTitle: "From first look to live conversation",
@@ -808,12 +917,12 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
     return {
       ...base,
       heroKicker: "Creative studio",
-      headline: `${businessName} turns visual work into a clearer client-facing offer.`,
-      subheadline: "A stronger studio website should show the standard of the work, the services behind it, and the right next step for project enquiries.",
+      headline: `${businessName} helps clients understand the work, the service, and how to start a project.`,
+      subheadline: "Show the standard of the work, the services behind it, and the right next step for project enquiries.",
       cta: "Start a project",
       secondaryCta: "See selected work",
       servicesTitle: "Services and selected work",
-      servicesIntro: "Studios win better-fit enquiries when the offer is visible and the process feels considered.",
+      servicesIntro: "Studios get better-fit enquiries when the offer is clear and the process feels easy to follow.",
       proofTitle: "Why clients reach out",
       proofIntro: "People enquire when the work looks strong, the offer is clear, and the process feels manageable.",
       processTitle: "How projects begin",
@@ -825,8 +934,8 @@ function buildFallbackWebsiteContent({ businessName, description, family, contex
     return {
       ...base,
       heroKicker: "Commerce brand",
-      headline: `${businessName} makes it easier to understand the offer and move from interest to order.`,
-      subheadline: "A sharper commerce landing page should show the product value quickly, reduce hesitation, and keep the buying path obvious.",
+      headline: `${businessName} helps customers understand the offer quickly and move from interest to order.`,
+      subheadline: "Show the product value early, reduce hesitation, and keep the buying path simple from the first visit.",
       cta: "Shop now",
       secondaryCta: "Browse collections",
       servicesTitle: "Collections and highlights",
@@ -847,7 +956,7 @@ function normalizeWebsiteContent(website = {}, fallback) {
             title: String(item?.title || "").trim(),
             body: String(item?.body || "").trim()
           }))
-          .filter((item) => item.title && item.body)
+          .filter((item) => item.title && item.body && !looksGenericBusinessCopy(item.title) && !looksGenericBusinessCopy(item.body))
       : [];
 
     if (normalized.length >= minLength) return normalized.slice(0, minLength);
@@ -862,7 +971,15 @@ function normalizeWebsiteContent(website = {}, fallback) {
             name: String(item?.name || "").trim(),
             role: String(item?.role || "").trim()
           }))
-          .filter((item) => item.quote && item.name && item.role)
+          .filter(
+            (item) =>
+              item.quote &&
+              item.name &&
+              item.role &&
+              !looksGenericBusinessCopy(item.quote) &&
+              !looksPlaceholderName(item.name) &&
+              !looksGenericBusinessCopy(item.role)
+          )
       : [];
 
     if (normalized.length >= 2) return normalized.slice(0, 2);
@@ -870,40 +987,28 @@ function normalizeWebsiteContent(website = {}, fallback) {
   };
 
   return {
-    heroKicker: String(website.heroKicker || fallback.heroKicker || "").trim(),
-    headline: String(website.headline || fallback.headline || "").trim(),
-    subheadline: String(website.subheadline || fallback.subheadline || "").trim(),
-    cta: String(website.cta || fallback.cta || "").trim(),
-    secondaryCta: String(website.secondaryCta || fallback.secondaryCta || "").trim(),
-    servicesTitle: String(website.servicesTitle || fallback.servicesTitle || "").trim(),
-    servicesIntro: String(website.servicesIntro || fallback.servicesIntro || "").trim(),
+    heroKicker: preferSpecificText(website.heroKicker, fallback.heroKicker),
+    headline: preferSpecificText(website.headline, fallback.headline),
+    subheadline: preferSpecificText(website.subheadline, fallback.subheadline),
+    cta: preferSpecificText(website.cta, fallback.cta),
+    secondaryCta: preferSpecificText(website.secondaryCta, fallback.secondaryCta),
+    servicesTitle: preferSpecificText(website.servicesTitle, fallback.servicesTitle),
+    servicesIntro: preferSpecificText(website.servicesIntro, fallback.servicesIntro),
     services: normalizeItems(website.services, fallback.services, 3),
-    proofTitle: String(website.proofTitle || fallback.proofTitle || "").trim(),
-    proofIntro: String(website.proofIntro || fallback.proofIntro || "").trim(),
+    proofTitle: preferSpecificText(website.proofTitle, fallback.proofTitle),
+    proofIntro: preferSpecificText(website.proofIntro, fallback.proofIntro),
     testimonials: normalizeTestimonials(website.testimonials, fallback.testimonials),
-    processTitle: String(website.processTitle || fallback.processTitle || "").trim(),
-    processIntro: String(website.processIntro || fallback.processIntro || "").trim(),
+    processTitle: preferSpecificText(website.processTitle, fallback.processTitle),
+    processIntro: preferSpecificText(website.processIntro, fallback.processIntro),
     processSteps: normalizeItems(website.processSteps, fallback.processSteps, 3),
-    ctaHeadline: String(website.ctaHeadline || fallback.ctaHeadline || "").trim(),
-    ctaBody: String(website.ctaBody || fallback.ctaBody || "").trim(),
-    footerNote: String(website.footerNote || fallback.footerNote || "").trim()
+    ctaHeadline: preferSpecificText(website.ctaHeadline, fallback.ctaHeadline),
+    ctaBody: preferSpecificText(website.ctaBody, fallback.ctaBody),
+    footerNote: preferSpecificText(website.footerNote, fallback.footerNote)
   };
 }
 
 function renderWebsiteTemplate({ businessName, family, scene, context = null, website }) {
-  const archetype = inferWebsiteArchetype({ businessName, description: context?.description || "", context });
-  const navMap = {
-    "tattoo-studio": ["Artists", "Styles", "Process", "Book"],
-    "sauna-studio": ["Services", "Projects", "Process", "Contact"],
-    wellness: ["Services", "Experience", "Process", "Book"],
-    hospitality: ["Stay", "Spaces", "Experience", "Book"],
-    commerce: ["Shop", "Collections", "Reviews", "Buy"],
-    saas: ["Product", "Use cases", "Process", "Contact"],
-    "creative-studio": ["Work", "Services", "Process", "Contact"],
-    "professional-service": ["Services", "About", "Process", "Contact"],
-    "local-service": ["Services", "About", "Process", "Contact"]
-  };
-  const navItems = navMap[archetype] || navMap["local-service"];
+  const navItems = FIXED_TEMPLATE_SECTIONS;
   const audience = String(context?.strategyRecommendation?.primaryAudience || "").trim() || "the right clients";
   const heroCards = [
     {
@@ -947,7 +1052,7 @@ function renderWebsiteTemplate({ businessName, family, scene, context = null, we
           </nav>
         </header>
 
-        <section class="site-hero site-hero-${family.layout}" data-lumix-section="hero" data-lumix-editable="hero">
+        <section class="site-hero" data-lumix-section="hero" data-lumix-editable="hero">
           <div class="site-hero-copy">
             <p class="eyebrow">${escapeHtml(website.heroKicker)}</p>
             <h1>${escapeHtml(website.headline)}</h1>
@@ -1161,6 +1266,23 @@ function buildFallbackBlogs({ businessName, description, context = null }) {
         excerpt: "Answer the common questions early and the project conversation becomes much easier to start."
       }
     ],
+    "cleaning-service": [
+      {
+        title: `What to include before requesting a cleaning quote from ${businessName}`,
+        keyword: `${businessName.toLowerCase()} cleaning quote`,
+        excerpt: "Property size, visit frequency, and the type of clean make it much easier to recommend the right service."
+      },
+      {
+        title: "How to compare recurring cleaning and one-off deep cleaning",
+        keyword: "recurring cleaning vs deep cleaning",
+        excerpt: "Different cleaning needs call for different visit structures, pricing logic, and preparation details."
+      },
+      {
+        title: "What clients look for in a reliable cleaning service",
+        keyword: "reliable cleaning service",
+        excerpt: "Trust, clear service scope, and a simple contact path matter more than vague promises."
+      }
+    ],
     wellness: [
       {
         title: `What first-time clients want to know before booking with ${businessName}`,
@@ -1223,22 +1345,17 @@ function buildFallbackBlogs({ businessName, description, context = null }) {
 
 function buildFamilyPrompt(family, scene) {
   return [
-    `Selected design family: ${family.name}.`,
-    `Selected visual scene: ${scene.id}.`,
-    "Decide the style automatically based on the business context. Do not ask the user to choose design preferences.",
-    `Visual atmosphere: ${family.atmosphere}.`,
-    `Palette direction: ${family.palette}.`,
-    `Hero backdrop direction: ${scene.prompt}`,
-    `Use these cues: ${family.cues.join(", ")}.`,
+    "Decide the visual style automatically from the business context.",
+    "The Lumix renderer already uses one fixed landing page template. Do not make layout decisions, do not add sections, and do not change section order.",
+    `Overall tone: ${family.atmosphere}.`,
+    `Color direction: ${family.palette}.`,
+    `Use these strengths: ${family.cues.join(", ")}.`,
     `Avoid these mistakes: ${family.avoid.join(", ")}.`,
-    "Aim for the finish level of a curated premium template marketplace made by real designers, not an AI site generator.",
-    "Make the landing page look like a polished premium business website that real users would want to publish, not an internal dashboard or a design exercise.",
-    "Keep the page easy to scan with one obvious CTA path.",
-    "Use category-appropriate layout choices so the site feels designed for this business, not for a generic AI demo.",
-    "Favor strong service cards, believable proof, and a clear process over decorative filler.",
-    "Prefer restraint over gimmicks: cleaner composition, sharper type hierarchy, stronger negative space, fewer louder effects.",
-    "Avoid synthetic AI aesthetics: no neon glow overload, no floating dashboard widgets, no 'next-gen AI' tone unless the business truly is AI.",
-    "The hero must feel image-led: include a visual backdrop, media surface, or atmospheric photographic area appropriate to the business category."
+    `Hero image direction: ${scene.prompt}`,
+    "Make the result feel like a real company website that could be published today.",
+    "Use clean hierarchy, restrained typography, clear spacing, believable proof, and one obvious CTA path.",
+    "Do not make the page feel like a design exercise, startup pitch, dashboard, or AI demo.",
+    "Favor real business clarity over decorative concepts."
   ].join("\n");
 }
 
@@ -1371,21 +1488,27 @@ async function requestStructuredJson(client, { isOpenRouter, model, prompt, sche
 function buildPrompt({ businessName, description, plan, customPrompt, family, scene, archetype }) {
   const lines = [
     buildLumixPromptHeader(),
-    "Generate a premium but compact monthly content package for a client.",
-    "Keep the output specific, useful, and conversion-focused.",
+    "Generate a real, publishable business website content package.",
+    "Keep the output specific, useful, grounded, and conversion-focused.",
     "Rules:",
     "- Do not return HTML for the website. Return structured website content only. The app will render the final landing page from your content.",
     "- No scripts, no styles, no markdown.",
-    "- The website must fit a real publishable business landing page structure.",
-    "- Required structure: Hero, Services/Offer, Proof/Testimonials, Process, CTA section, Footer.",
+    "- The website must fit the fixed Lumix landing page template.",
+    "- Required structure and fixed section order: Hero, Services/Offer, Proof/Testimonials, Process, CTA section, Footer.",
+    "- AI only fills the content fields. Do not invent alternative layouts, different section orders, extra sections, missing sections, sidebars, pricing tables, FAQ sections, galleries, or other structural changes.",
     "- H1 must be realistic and publishable, no more than roughly 2 to 3 lines when rendered.",
+    "- Keep headline language concrete and believable. No slogan-only headlines, no concept-copy, and no dramatic oversized-art-direction language.",
+    "- Subheadline must read like real business website copy: clear offer, clear fit, clear next step.",
+    "- Do not use design-language words in customer-facing copy. Avoid words like minimal, cinematic, editorial, premium feel, hierarchy, composition, image-led, layout, surface, or showcase unless the business itself sells design services and the wording is still natural.",
     "- Section titles must read like real company website sections, not design showcase labels or AI concept headings.",
     "- Services must be concrete and business-specific. Testimonials must sound like real client feedback, not vague praise.",
+    "- Do not invent placeholder personal names, fake agencies, fake cities, or fake performance numbers. If attribution is needed, use believable anonymous labels such as Residential client, Operations lead, or Returning customer.",
     "- Build an original website, not a clone of any known product or template.",
-    "- The page should feel like it belongs in a high-quality design marketplace, with real art direction, believable spacing, and strong corporate or service-site realism.",
-    "- Do not make the page look AI-generated, generic, or over-optimized for 'AI agency' aesthetics.",
+    "- The page must feel like a real company website, not a concept board, mockup, or internal demo.",
+    "- Do not make the page look AI-generated, generic, or over-optimized for AI agency aesthetics.",
     "- Avoid filler buzzwords like next-gen, revolutionary, future-ready, intelligent platform, or similar empty startup language unless clearly justified.",
     "- Prefer believable business language, category-specific proof, and tasteful visual restraint.",
+    "- Do not mention previews, mockups, templates, design systems, visual scenes, or anything that would reveal this was AI-generated.",
     "- Blog titles and excerpts must fit the actual business category and customer questions, not generic AI marketing topics.",
     "- SEO title must be under 60 characters.",
     "- Meta description must be under 160 characters.",
@@ -1566,7 +1689,7 @@ function buildDemoResponse({ businessName, description, family, context = null }
 
   return {
     mode: "demo",
-    notice: `OPENAI_API_KEY puuttuu. Sisalto generoitiin demo-tilassa. Design family: ${family.name}.`,
+    notice: "OPENAI_API_KEY puuttuu. Sisalto generoitiin demo-tilassa.",
     website: {
       ...fallbackWebsite,
       html: renderWebsiteTemplate({
@@ -1595,7 +1718,7 @@ function buildSavedPack({ businessName, description, parsed = null, source = nul
 
   return {
     mode: source?.mode || fallback.mode,
-    notice: `${source?.notice || fallback.notice} Design family: ${family.name}.`,
+    notice: source?.notice || fallback.notice,
     website: {
       ...normalizedWebsite,
       html: renderWebsiteTemplate({
