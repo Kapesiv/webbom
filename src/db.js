@@ -51,6 +51,7 @@ function mapUser(row) {
         role: row.role,
         agencyId: row.agency_id,
         agencyName: row.agency_name_joined || row.agency_name,
+        onboardingCompletedAt: row.onboarding_completed_at || null,
         createdAt: row.created_at
       }
     : null;
@@ -301,6 +302,7 @@ export function createDatabase() {
   const cwd = process.cwd();
   const configuredPath = process.env.SQLITE_PATH || "./data/autonomous-agency.sqlite";
   const dbPath = path.isAbsolute(configuredPath) ? configuredPath : path.join(cwd, configuredPath);
+  const isoNowSql = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
@@ -318,8 +320,100 @@ export function createDatabase() {
     return db.prepare(sql).run(...params);
   }
 
+  function getColumn(tableName, columnName) {
+    return all(`PRAGMA table_info(${tableName})`).find((column) => column.name === columnName) || null;
+  }
+
   function columnExists(tableName, columnName) {
-    return all(`PRAGMA table_info(${tableName})`).some((column) => column.name === columnName);
+    return Boolean(getColumn(tableName, columnName));
+  }
+
+  function normalizeSqlDefault(value) {
+    return String(value || "")
+      .replaceAll('"', "'")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  }
+
+  function ensureStrategyRecommendationTimestampDefaults() {
+    const createdAtColumn = getColumn("strategy_recommendations", "created_at");
+    const updatedAtColumn = getColumn("strategy_recommendations", "updated_at");
+    const expectedDefault = normalizeSqlDefault(`(${isoNowSql})`);
+
+    if (
+      normalizeSqlDefault(createdAtColumn?.dflt_value) === expectedDefault &&
+      normalizeSqlDefault(updatedAtColumn?.dflt_value) === expectedDefault
+    ) {
+      return;
+    }
+
+    const stamp = nowIso();
+    const stampSql = `'${stamp}'`;
+
+    db.exec("BEGIN");
+
+    try {
+      db.exec(`
+        CREATE TABLE strategy_recommendations_v2 (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id INTEGER NOT NULL UNIQUE,
+          status TEXT NOT NULL DEFAULT 'approved',
+          strategy_json TEXT,
+          strategy_summary TEXT,
+          strategy_updated_at TEXT,
+          positioning TEXT,
+          primary_offer TEXT,
+          primary_audience TEXT,
+          content_angles_json TEXT,
+          cta_strategy TEXT,
+          homepage_structure_json TEXT,
+          created_at TEXT NOT NULL DEFAULT (${isoNowSql}),
+          updated_at TEXT NOT NULL DEFAULT (${isoNowSql}),
+          FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        );
+
+        INSERT INTO strategy_recommendations_v2 (
+          id,
+          client_id,
+          status,
+          strategy_json,
+          strategy_summary,
+          strategy_updated_at,
+          positioning,
+          primary_offer,
+          primary_audience,
+          content_angles_json,
+          cta_strategy,
+          homepage_structure_json,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          client_id,
+          COALESCE(status, 'approved'),
+          strategy_json,
+          strategy_summary,
+          strategy_updated_at,
+          positioning,
+          primary_offer,
+          primary_audience,
+          content_angles_json,
+          cta_strategy,
+          homepage_structure_json,
+          COALESCE(created_at, ${stampSql}),
+          COALESCE(updated_at, strategy_updated_at, created_at, ${stampSql})
+        FROM strategy_recommendations;
+
+        DROP TABLE strategy_recommendations;
+        ALTER TABLE strategy_recommendations_v2 RENAME TO strategy_recommendations;
+      `);
+
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   db.exec(`
@@ -561,14 +655,17 @@ export function createDatabase() {
       content_angles_json TEXT,
       cta_strategy TEXT,
       homepage_structure_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (${isoNowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${isoNowSql}),
       FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
     );
   `);
 
   if (!columnExists("users", "agency_id")) db.exec("ALTER TABLE users ADD COLUMN agency_id INTEGER");
   if (!columnExists("users", "role")) db.exec("ALTER TABLE users ADD COLUMN role TEXT");
+  if (!columnExists("users", "onboarding_completed_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN onboarding_completed_at TEXT");
+  }
   if (!columnExists("clients", "agency_id")) db.exec("ALTER TABLE clients ADD COLUMN agency_id INTEGER");
   if (!columnExists("clients", "custom_prompt")) db.exec("ALTER TABLE clients ADD COLUMN custom_prompt TEXT");
   if (!columnExists("strategy_recommendations", "status")) {
@@ -583,6 +680,8 @@ export function createDatabase() {
   if (!columnExists("strategy_recommendations", "strategy_updated_at")) {
     db.exec("ALTER TABLE strategy_recommendations ADD COLUMN strategy_updated_at TEXT");
   }
+
+  ensureStrategyRecommendationTimestampDefaults();
 
   run(
     `
@@ -767,6 +866,12 @@ export function createDatabase() {
 
   function updateAgencyMemberRole(agencyId, userId, role) {
     run(`UPDATE users SET role = ? WHERE id = ? AND agency_id = ?`, role, userId, agencyId);
+    return findUserById(userId);
+  }
+
+  function markUserOnboardingComplete(userId) {
+    const stamp = nowIso();
+    run(`UPDATE users SET onboarding_completed_at = ? WHERE id = ?`, stamp, userId);
     return findUserById(userId);
   }
 
@@ -1206,6 +1311,7 @@ export function createDatabase() {
         status,
         strategyJson,
         summary,
+        stamp,
         stamp,
         stamp
       );
@@ -1952,6 +2058,7 @@ export function createDatabase() {
     getUserRecordByEmail,
     findUserByEmail,
     findUserById,
+    markUserOnboardingComplete,
     listAgencyMembers,
     updateAgencyMemberRole,
     createSession,

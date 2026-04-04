@@ -1,6 +1,7 @@
 import crypto from "crypto";
 
 const SESSION_COOKIE_NAME = "autonomous_agency_session";
+const isProduction = process.env.NODE_ENV === "production";
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -24,11 +25,7 @@ function parseCookies(header = "") {
         const separatorIndex = part.indexOf("=");
         const key = separatorIndex >= 0 ? part.slice(0, separatorIndex) : part;
         const value = separatorIndex >= 0 ? part.slice(separatorIndex + 1) : "";
-        try {
-          return [key, decodeURIComponent(value)];
-        } catch {
-          return [key, value];
-        }
+        return [key, decodeURIComponent(value)];
       })
   );
 }
@@ -40,6 +37,7 @@ function sanitizeUser(user) {
     role: user.role,
     agencyId: user.agencyId,
     agencyName: user.agencyName,
+    onboardingCompletedAt: user.onboardingCompletedAt || null,
     createdAt: user.createdAt
   };
 }
@@ -47,41 +45,30 @@ function sanitizeUser(user) {
 export function createAuthService(database) {
   const sessionTtlDays = Math.max(1, Number(process.env.SESSION_TTL_DAYS || 30));
   const sessionMaxAgeSeconds = sessionTtlDays * 24 * 60 * 60;
-  const secureCookies =
-    process.env.NODE_ENV === "production" || String(process.env.APP_URL || "").startsWith("https://");
 
-  function buildSessionCookie(token) {
+  function buildCookieAttributes(token, maxAgeSeconds) {
     const attributes = [
       `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
       "Path=/",
       "HttpOnly",
       "SameSite=Lax",
-      `Max-Age=${sessionMaxAgeSeconds}`,
-      "Priority=High"
+      "Priority=High",
+      `Max-Age=${maxAgeSeconds}`
     ];
 
-    if (secureCookies) {
+    if (isProduction) {
       attributes.push("Secure");
     }
 
-    return attributes.join("; ");
+    return attributes;
+  }
+
+  function buildSessionCookie(token) {
+    return buildCookieAttributes(token, sessionMaxAgeSeconds).join("; ");
   }
 
   function buildClearSessionCookie() {
-    const attributes = [
-      `${SESSION_COOKIE_NAME}=`,
-      "Path=/",
-      "HttpOnly",
-      "SameSite=Lax",
-      "Max-Age=0",
-      "Priority=High"
-    ];
-
-    if (secureCookies) {
-      attributes.push("Secure");
-    }
-
-    return attributes.join("; ");
+    return buildCookieAttributes("", 0).join("; ");
   }
 
   function createSessionForUser(userId) {

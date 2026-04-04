@@ -1,38 +1,489 @@
 <!DOCTYPE html>
-<html lang="fi">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kirjaudu | Lumix</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <title>Log in | EasyOnlinePresence</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #05090f;
+        --panel: rgba(10, 16, 26, 0.9);
+        --panel-alt: rgba(255, 255, 255, 0.03);
+        --line: rgba(154, 181, 214, 0.16);
+        --line-strong: rgba(154, 181, 214, 0.28);
+        --ink: #f6f8fc;
+        --muted: #93a7ba;
+        --accent: #7de0ff;
+        --accent-strong: #3499ff;
+        --danger: #ff9f97;
+        --shadow: 0 28px 90px rgba(0, 0, 0, 0.45);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 18% 10%, rgba(61, 111, 255, 0.14), transparent 24%),
+          radial-gradient(circle at 84% 82%, rgba(125, 224, 255, 0.08), transparent 24%),
+          linear-gradient(180deg, #03060a 0%, var(--bg) 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(125, 224, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(125, 224, 255, 0.035) 1px, transparent 1px);
+        background-size: 42px 42px;
+        mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.8), transparent 88%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .shell {
+        width: min(1380px, calc(100% - 28px));
+        min-height: 100vh;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: minmax(320px, 0.92fr) minmax(320px, 0.68fr);
+        gap: 22px;
+        align-items: stretch;
+        padding: 20px 0;
+      }
+
+      .auth-side,
+      .showcase {
+        border: 1px solid var(--line);
+        border-radius: 34px;
+        background: linear-gradient(180deg, rgba(10, 16, 26, 0.9), rgba(7, 11, 18, 0.94));
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .auth-side {
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+
+      .auth-panel {
+        width: min(460px, 100%);
+        display: grid;
+        gap: 22px;
+      }
+
+      .top-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 18px;
+        height: 18px;
+        border-radius: 6px;
+        background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+        box-shadow: 0 0 26px rgba(52, 153, 255, 0.38);
+      }
+
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border-radius: 4px;
+        background: rgba(5, 9, 15, 0.8);
+      }
+
+      .brand-name,
+      h1,
+      .showcase-card strong,
+      .showcase-intro strong {
+        font-family: "Sora", "Manrope", sans-serif;
+      }
+
+      .brand-name {
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .back-link {
+        color: var(--muted);
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+
+      .back-link:hover {
+        color: var(--ink);
+      }
+
+      .eyebrow,
+      .mini-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--accent);
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before,
+      .mini-label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: currentColor;
+        box-shadow: 0 0 14px currentColor;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.8rem, 5vw, 4.3rem);
+        line-height: 0.94;
+        letter-spacing: -0.06em;
+      }
+
+      .copy {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.7;
+        max-width: 34ch;
+      }
+
+      .card {
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      label {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #d9e7f5;
+      }
+
+      input {
+        width: 100%;
+        min-height: 54px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--ink);
+        font: inherit;
+        outline: none;
+        transition:
+          border-color 0.2s ease,
+          box-shadow 0.2s ease,
+          background 0.2s ease;
+      }
+
+      input::placeholder {
+        color: #6e8498;
+      }
+
+      input:focus {
+        border-color: rgba(125, 224, 255, 0.45);
+        box-shadow: 0 0 0 4px rgba(125, 224, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .row a,
+      .foot a {
+        color: #d9efff;
+        font-weight: 700;
+      }
+
+      .button {
+        min-height: 54px;
+        border: 0;
+        border-radius: 16px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+        color: #031018;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+        box-shadow: 0 18px 34px rgba(52, 153, 255, 0.24);
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .status {
+        min-height: 20px;
+        color: var(--danger);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .foot {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .showcase {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 1px;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .showcase-intro,
+      .showcase-grid {
+        background: rgba(7, 11, 18, 0.98);
+      }
+
+      .showcase-intro {
+        display: grid;
+        gap: 14px;
+        padding: 24px;
+      }
+
+      .showcase-intro strong {
+        font-size: 1.35rem;
+        letter-spacing: -0.05em;
+      }
+
+      .showcase-intro p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+        max-width: 38ch;
+      }
+
+      .showcase-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px;
+      }
+
+      .showcase-card {
+        position: relative;
+        min-height: 220px;
+        padding: 18px;
+        display: grid;
+        align-content: end;
+        gap: 8px;
+        background: linear-gradient(180deg, rgba(12, 18, 28, 0.98), rgba(9, 14, 22, 0.98));
+        overflow: hidden;
+      }
+
+      .showcase-card::before {
+        content: "";
+        position: absolute;
+        inset: 18px 18px auto;
+        height: 120px;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background:
+          radial-gradient(circle at 20% 20%, rgba(125, 224, 255, 0.3), transparent 32%),
+          linear-gradient(160deg, rgba(32, 56, 84, 0.96), rgba(12, 18, 28, 0.98));
+      }
+
+      .showcase-card:nth-child(2)::before {
+        background:
+          radial-gradient(circle at 75% 24%, rgba(255, 190, 122, 0.28), transparent 32%),
+          linear-gradient(160deg, rgba(34, 33, 52, 0.96), rgba(12, 18, 28, 0.98));
+      }
+
+      .showcase-card:nth-child(3)::before {
+        background:
+          radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.18), transparent 26%),
+          linear-gradient(160deg, rgba(21, 39, 58, 0.96), rgba(12, 18, 28, 0.98));
+      }
+
+      .showcase-card:nth-child(4)::before {
+        background:
+          radial-gradient(circle at 28% 80%, rgba(125, 224, 255, 0.24), transparent 32%),
+          linear-gradient(160deg, rgba(39, 31, 26, 0.96), rgba(12, 18, 28, 0.98));
+      }
+
+      .showcase-card strong {
+        position: relative;
+        font-size: 1.08rem;
+        letter-spacing: -0.04em;
+      }
+
+      .showcase-card p {
+        position: relative;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 1080px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .showcase {
+          min-height: 560px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          width: min(1380px, calc(100% - 20px));
+          padding: 10px 0;
+        }
+
+        .auth-side,
+        .showcase {
+          border-radius: 24px;
+        }
+
+        .auth-side {
+          padding: 18px;
+        }
+
+        .card,
+        .showcase-intro {
+          padding: 18px;
+        }
+
+        .showcase-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .top-row,
+        .row {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
   </head>
   <body>
-    <main class="auth-shell">
-      <section class="auth-simple auth-layout">
-        <a class="auth-back-link" href="/lumix">Takaisin pääsivulle</a>
-        <p class="eyebrow">Lumix</p>
-        <h1>Kirjaudu</h1>
-        <p class="lede">Avaa työtila ja jatka siitä mihin jäit.</p>
+    <main class="shell">
+      <section class="auth-side">
+        <div class="auth-panel">
+          <div class="top-row">
+            <a href="/" class="brand">
+              <span class="brand-mark" aria-hidden="true"></span>
+              <span class="brand-name">EasyOnlinePresence</span>
+            </a>
+            <a href="/" class="back-link">Back to site</a>
+          </div>
 
-        <form id="login-form" class="stack-form auth-card auth-panel">
-          <label>
-            <span>Sähköposti</span>
-            <input name="email" type="email" placeholder="owner@example.com" required />
-          </label>
-          <label>
-            <span>Salasana</span>
-            <input name="password" type="password" placeholder="Salasana" required />
-          </label>
-          <button type="submit">Kirjaudu</button>
-        </form>
+          <div>
+            <span class="eyebrow">Workspace access</span>
+            <h1>Step back into the studio.</h1>
+            <p class="copy">Open your website previews, content direction, and SEO workflow from one place.</p>
+          </div>
 
-        <p id="status-banner" class="auth-status" aria-live="polite"></p>
+          <div class="card">
+            <form id="login-form" method="POST" action="/login">
+              <div class="field">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" placeholder="you@example.com" required />
+              </div>
 
-        <p class="auth-link-row">
-          Ei vielä tiliä?
-          <a href="/register">Rekisteröidy</a>
-        </p>
+              <div class="field">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" placeholder="Enter your password" required />
+              </div>
+
+              <div class="row">
+                <span>Secure workspace login</span>
+                <a href="#">Forgot password?</a>
+              </div>
+
+              <button class="button" type="submit">Continue to dashboard</button>
+            </form>
+          </div>
+
+          <p id="status-banner" class="status" aria-live="polite"></p>
+
+          <p class="foot">
+            New here?
+            <a href="/register">Create an account</a>
+          </p>
+        </div>
       </section>
+
+      <aside class="showcase" aria-label="Preview gallery">
+        <div class="showcase-intro">
+          <span class="mini-label">Preview-first product</span>
+          <strong>The work should look real before the customer ever clicks publish.</strong>
+          <p>
+            EasyOnlinePresence keeps the login surface close to the product mood: calm, high-contrast, and visibly tied to real
+            website outcomes.
+          </p>
+        </div>
+
+        <div class="showcase-grid">
+          <article class="showcase-card">
+            <strong>Service brand relaunch</strong>
+            <p>Refined offer hierarchy, stronger trust blocks, and one clear consultation CTA.</p>
+          </article>
+          <article class="showcase-card">
+            <strong>Campaign landing system</strong>
+            <p>Premium hero layout, tighter copy pacing, and a cleaner path from scroll to action.</p>
+          </article>
+          <article class="showcase-card">
+            <strong>SEO-led content direction</strong>
+            <p>Website sections, metadata, and article briefs kept inside the same workspace state.</p>
+          </article>
+          <article class="showcase-card">
+            <strong>Publish-ready control</strong>
+            <p>Move from preview to live target without rebuilding the entire project in separate tools.</p>
+          </article>
+        </div>
+      </aside>
     </main>
 
     <script type="module" src="/login.js"></script>

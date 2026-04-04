@@ -15,18 +15,6 @@ import { createQueueService } from "./queue.js";
 import { createReportService } from "./reports.js";
 import { createScheduler } from "./scheduler.js";
 import {
-  createRateLimitMiddleware,
-  createSecurityHeadersMiddleware,
-  createTrustedOriginMiddleware,
-  getClientIp,
-  getSecurityConfig,
-  getTrustedOrigins,
-  isPlainObject,
-  isValidEmail,
-  limitString,
-  parseEntityId
-} from "./security.js";
-import {
   buildLumixContext,
   buildLumixRuntime,
   getLumixAgent,
@@ -36,6 +24,12 @@ import {
   runLumixAction
 } from "./lumix.js";
 
+const nodeEnv = String(process.env.NODE_ENV || "").trim();
+
+if (!nodeEnv) {
+  throw new Error("NODE_ENV is required. Set NODE_ENV=production for production.");
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "..", "public");
@@ -43,6 +37,12 @@ const publicDir = path.join(__dirname, "..", "public");
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 3000);
 const appUrl = process.env.APP_URL || `http://${host}:${port}`;
+const siteUrl = appUrl.replace(/\/$/, "");
+const expectsProduction = appUrl.startsWith("https://");
+
+if (expectsProduction && nodeEnv !== "production") {
+  throw new Error("Production APP_URL requires NODE_ENV=production.");
+}
 
 const database = createDatabase();
 const auth = createAuthService(database);
@@ -50,11 +50,12 @@ const agency = createAgencyService();
 const billing = createBillingService(database, appUrl);
 const publisher = createPublishService(database);
 const reports = createReportService(database);
-const trustedOrigins = getTrustedOrigins(appUrl);
-const securityConfig = getSecurityConfig();
 
 const app = express();
-app.disable("x-powered-by");
+
+if (nodeEnv === "production") {
+  app.set("trust proxy", 1);
+}
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   try {
@@ -70,66 +71,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
-app.use(createSecurityHeadersMiddleware({ appUrl }));
 app.use(express.static(publicDir, { index: false }));
-
-const requireTrustedOrigin = createTrustedOriginMiddleware({ trustedOrigins });
-const authRateLimit = createRateLimitMiddleware({
-  windowMs: securityConfig.authWindowMs,
-  max: securityConfig.authMax,
-  keyGenerator: (req) => `${getClientIp(req)}:${limitString(req.body?.email, 254)}:${req.path}`,
-  message: "Too many authentication attempts. Try again later."
-});
-const publicTrackRateLimit = createRateLimitMiddleware({
-  windowMs: securityConfig.publicTrackWindowMs,
-  max: securityConfig.publicTrackMax,
-  keyGenerator: (req) => `${getClientIp(req)}:track:${req.params.id}`,
-  message: "Tracking rate limit reached."
-});
-const publicLeadRateLimit = createRateLimitMiddleware({
-  windowMs: securityConfig.publicLeadWindowMs,
-  max: securityConfig.publicLeadMax,
-  keyGenerator: (req) => `${getClientIp(req)}:lead:${req.params.id}`,
-  message: "Lead form rate limit reached."
-});
-
-app.use("/api", (req, res, next) => {
-  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
-    return next();
-  }
-
-  if (req.path === "/stripe/webhook" || req.path.startsWith("/public/")) {
-    return next();
-  }
-
-  return requireTrustedOrigin(req, res, next);
-});
-
-function readEntityIdOrFail(req, res, name = "id") {
-  const parsedId = parseEntityId(req.params[name]);
-  if (!parsedId) {
-    res.status(400).json({ error: `Invalid ${name}.` });
-    return null;
-  }
-  return parsedId;
-}
-
-function readMetadata(input, maxLength = 2000) {
-  if (input == null) {
-    return {};
-  }
-
-  if (!isPlainObject(input)) {
-    throw new Error("metadata must be an object.");
-  }
-
-  const serialized = JSON.stringify(input);
-  if (serialized.length > maxLength) {
-    throw new Error("metadata is too large.");
-  }
-
-  return input;
-}
 
 function requireAuth(req, res) {
   const user = auth.getUserFromRequest(req);
@@ -174,6 +116,131 @@ function getGenerateDecision(client) {
     ready: runtime.actions.generate_pack.ready,
     reason: runtime.actions.generate_pack.reason
   };
+}
+
+function getOnboardingBusinessConfig(choice) {
+  if (choice === "local_service") {
+    return {
+      businessType: "local_service",
+      offerType: "service",
+      audienceType: "local_customers"
+    };
+  }
+
+  if (choice === "premium_studio") {
+    return {
+      businessType: "local_service",
+      offerType: "service",
+      audienceType: "consumers"
+    };
+  }
+
+  if (choice === "expert_business") {
+    return {
+      businessType: "b2b_service",
+      offerType: "service",
+      audienceType: "small_businesses"
+    };
+  }
+
+  return {
+    businessType: "b2b_service",
+    offerType: "service",
+    audienceType: "consumers"
+  };
+}
+
+function getOnboardingGoalConfig(choice) {
+  if (choice === "bookings") {
+    return {
+      goalType: "bookings",
+      mainCta: "Book now"
+    };
+  }
+
+  if (choice === "trust") {
+    return {
+      goalType: "awareness",
+      mainCta: "Learn more"
+    };
+  }
+
+  return {
+    goalType: "lead_generation",
+    mainCta: "Request a quote"
+  };
+}
+
+function getOnboardingToneConfig(choice) {
+  if (choice === "premium_bold") {
+    return {
+      toneType: "premium",
+      pricePosition: "premium"
+    };
+  }
+
+  if (choice === "calm_elegant") {
+    return {
+      toneType: "friendly",
+      pricePosition: "premium"
+    };
+  }
+
+  return {
+    toneType: "trusted",
+    pricePosition: "standard"
+  };
+}
+
+function sanitizeOtherValue(value) {
+  return String(value || "").trim().slice(0, 240);
+}
+
+function buildOnboardingSummary(answers) {
+  return [
+    `Business direction: ${answers.businessTypeChoiceLabel}${answers.businessTypeOther ? ` (${answers.businessTypeOther})` : ""}.`,
+    `Primary goal: ${answers.goalChoiceLabel}${answers.goalOther ? ` (${answers.goalOther})` : ""}.`,
+    `Preferred feel: ${answers.toneChoiceLabel}${answers.toneOther ? ` (${answers.toneOther})` : ""}.`,
+    `Privacy feel: ${answers.privacyChoiceLabel}${answers.privacyOther ? ` (${answers.privacyOther})` : ""}.`,
+    `Visual direction: ${answers.visualChoiceLabel}${answers.visualOther ? ` (${answers.visualOther})` : ""}.`
+  ].join(" ");
+}
+
+function getOnboardingAnswerLabel(group, choice) {
+  const labels = {
+    businessType: {
+      local_service: "Local service",
+      premium_studio: "Premium studio or brand",
+      expert_business: "Business or expert company",
+      other: "Other"
+    },
+    goal: {
+      leads: "Get leads",
+      bookings: "Get bookings",
+      trust: "Build trust",
+      other: "Other"
+    },
+    tone: {
+      premium_bold: "Premium and bold",
+      calm_elegant: "Calm and elegant",
+      clear_trustworthy: "Clear and trustworthy",
+      other: "Other"
+    },
+    privacy: {
+      public_visible: "Public and visible",
+      polished_restrained: "Polished but restrained",
+      private_discreet: "Private and discreet",
+      other: "Other"
+    },
+    visual: {
+      minimal_clean: "Minimal and clean",
+      rich_visual: "Rich and visual",
+      product_ui: "Structured and product-like",
+      other: "Other"
+    }
+  };
+
+  return labels[group]?.[choice] || "Other";
 }
 
 async function generateAndPersistClient(clientId, mode) {
@@ -261,7 +328,8 @@ app.get("/api/health", (_req, res) => {
     stripeConfigured: billing.configured,
     schedulerIntervalMs: scheduler.intervalMs,
     queueIntervalMs: queue.intervalMs,
-    queueConcurrency: queue.concurrency
+    queueConcurrency: queue.concurrency,
+    databasePath: database.dbPath
   });
 });
 
@@ -313,7 +381,38 @@ app.get("/api/lumix", (_req, res) => {
   });
 });
 
-app.post("/api/auth/register", authRateLimit, (req, res) => {
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send(`User-agent: *
+Allow: /
+
+Sitemap: ${siteUrl}/sitemap.xml
+`);
+});
+
+app.get("/sitemap.xml", (_req, res) => {
+  const now = new Date().toISOString();
+  const urls = [
+    { loc: `${siteUrl}/`, priority: "1.0" }
+  ];
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls
+  .map(
+    (entry) => `  <url>
+    <loc>${entry.loc}</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${entry.priority}</priority>
+  </url>`
+  )
+  .join("\n")}
+</urlset>`;
+
+  res.type("application/xml").send(xml);
+});
+
+app.post("/api/auth/register", (req, res) => {
   try {
     const result = auth.register(req.body || {});
     res.setHeader("Set-Cookie", auth.buildSessionCookie(result.session.token));
@@ -323,7 +422,7 @@ app.post("/api/auth/register", authRateLimit, (req, res) => {
   }
 });
 
-app.post("/api/auth/login", authRateLimit, (req, res) => {
+app.post("/api/auth/login", (req, res) => {
   try {
     const result = auth.login(req.body || {});
     res.setHeader("Set-Cookie", auth.buildSessionCookie(result.session.token));
@@ -337,6 +436,95 @@ app.post("/api/auth/logout", (req, res) => {
   auth.logout(req);
   res.setHeader("Set-Cookie", auth.buildClearSessionCookie());
   res.json({ ok: true });
+});
+
+app.post("/api/auth/onboarding", (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const forceNewClient = Boolean(req.body.forceNewClient);
+
+  const businessTypeChoice = String(req.body.businessTypeChoice || "").trim() || "other";
+  const goalChoice = String(req.body.goalChoice || "").trim() || "leads";
+  const toneChoice = String(req.body.toneChoice || "").trim() || "clear_trustworthy";
+  const privacyChoice = String(req.body.privacyChoice || "").trim() || "polished_restrained";
+  const visualChoice = String(req.body.visualChoice || "").trim() || "minimal_clean";
+
+  const answers = {
+    businessTypeChoice,
+    businessTypeChoiceLabel: getOnboardingAnswerLabel("businessType", businessTypeChoice),
+    businessTypeOther: sanitizeOtherValue(req.body.businessTypeOther),
+    goalChoice,
+    goalChoiceLabel: getOnboardingAnswerLabel("goal", goalChoice),
+    goalOther: sanitizeOtherValue(req.body.goalOther),
+    toneChoice,
+    toneChoiceLabel: getOnboardingAnswerLabel("tone", toneChoice),
+    toneOther: sanitizeOtherValue(req.body.toneOther),
+    privacyChoice,
+    privacyChoiceLabel: getOnboardingAnswerLabel("privacy", privacyChoice),
+    privacyOther: sanitizeOtherValue(req.body.privacyOther),
+    visualChoice,
+    visualChoiceLabel: getOnboardingAnswerLabel("visual", visualChoice),
+    visualOther: sanitizeOtherValue(req.body.visualOther)
+  };
+
+  const onboardingSummary = buildOnboardingSummary(answers);
+  const businessConfig = getOnboardingBusinessConfig(businessTypeChoice);
+  const goalConfig = getOnboardingGoalConfig(goalChoice);
+  const toneConfig = getOnboardingToneConfig(toneChoice);
+  const existingClients = database.listClientsForAgency(user.agencyId);
+  const client =
+    (!forceNewClient && existingClients[0]) ||
+    database.createClient(user.agencyId, user.id, {
+      businessName: forceNewClient ? `New Website ${existingClients.length + 1}` : user.agencyName || "New business",
+      description: "",
+      customPrompt: "",
+      plan: "starter"
+    });
+
+  const businessProfile = database.upsertBusinessProfile(client.id, {
+    ...businessConfig,
+    ...goalConfig,
+    ...toneConfig,
+    rawNotes: {
+      notes: onboardingSummary,
+      onboardingSummary,
+      privacyPreference: privacyChoice,
+      visualIntensity: visualChoice,
+      otherBusinessType: answers.businessTypeOther,
+      otherGoal: answers.goalOther,
+      otherTone: answers.toneOther,
+      otherPrivacy: answers.privacyOther,
+      otherVisual: answers.visualOther,
+      businessTypeLabel: answers.businessTypeChoiceLabel,
+      goalLabel: answers.goalChoiceLabel,
+      toneLabel: answers.toneChoiceLabel,
+      privacyLabel: answers.privacyChoiceLabel,
+      visualLabel: answers.visualChoiceLabel
+    }
+  });
+
+  const intakeAnswers = database.saveIntakeAnswers(client.id, [
+    { questionKey: "business_type", answerValue: businessProfile.businessType, answerLabel: answers.businessTypeChoiceLabel },
+    { questionKey: "offer_type", answerValue: businessProfile.offerType, answerLabel: businessProfile.offerType },
+    { questionKey: "audience_type", answerValue: businessProfile.audienceType, answerLabel: businessProfile.audienceType },
+    { questionKey: "goal_type", answerValue: businessProfile.goalType, answerLabel: answers.goalChoiceLabel },
+    { questionKey: "tone_type", answerValue: businessProfile.toneType, answerLabel: answers.toneChoiceLabel },
+    { questionKey: "price_position", answerValue: businessProfile.pricePosition, answerLabel: businessProfile.pricePosition },
+    { questionKey: "main_cta", answerValue: businessProfile.mainCta, answerLabel: businessProfile.mainCta },
+    { questionKey: "privacy_preference", answerValue: privacyChoice, answerLabel: answers.privacyChoiceLabel },
+    { questionKey: "visual_intensity", answerValue: visualChoice, answerLabel: answers.visualChoiceLabel }
+  ]);
+
+  const refreshedUser = database.markUserOnboardingComplete(user.id);
+  const refreshedClient = hydrateLumixClient(database.getClientById(user.agencyId, client.id));
+
+  res.json({
+    ok: true,
+    user: refreshedUser,
+    client: refreshedClient,
+    businessProfile,
+    intakeAnswers
+  });
 });
 
 app.get("/api/jobs", (req, res) => {
@@ -378,15 +566,13 @@ app.post("/api/team-members", (req, res) => {
 app.patch("/api/team-members/:id", (req, res) => {
   const user = requireAuth(req, res);
   if (!user || !requireRole(user, res, ["owner"])) return;
-  const memberId = readEntityIdOrFail(req, res);
-  if (!memberId) return;
 
   const role = String(req.body.role || "");
   if (!["admin", "member"].includes(role)) {
     return res.status(400).json({ error: "Role must be admin or member." });
   }
 
-  const member = database.updateAgencyMemberRole(user.agencyId, memberId, role);
+  const member = database.updateAgencyMemberRole(user.agencyId, Number(req.params.id), role);
   if (!member) return res.status(404).json({ error: "Member not found." });
   res.json({ member });
 });
@@ -397,7 +583,7 @@ app.post("/api/clients", (req, res) => {
 
   const businessName = String(req.body.businessName || "").trim();
   const description = String(req.body.description || "").trim();
-  const customPrompt = limitString(req.body.customPrompt, 4000);
+  const customPrompt = String(req.body.customPrompt || "").trim();
   const plan = String(req.body.plan || "starter").trim();
   const generationIntervalDays = Number(req.body.generationIntervalDays || 30);
   const autoGenerate = req.body.autoGenerate !== false;
@@ -405,14 +591,6 @@ app.post("/api/clients", (req, res) => {
 
   if (!businessName || !description) {
     return res.status(400).json({ error: "businessName and description are required." });
-  }
-
-  if (businessName.length > 120 || description.length > 3000 || !["starter", "growth", "scale"].includes(plan)) {
-    return res.status(400).json({ error: "Invalid client payload." });
-  }
-
-  if (![7, 14, 30].includes(generationIntervalDays)) {
-    return res.status(400).json({ error: "generationIntervalDays must be 7, 14 or 30." });
   }
 
   const client = database.createClient(user.agencyId, user.id, {
@@ -445,9 +623,7 @@ app.post("/api/clients", (req, res) => {
 app.get("/api/clients/:id", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const client = database.getClientById(user.agencyId, clientId);
+  const client = database.getClientById(user.agencyId, Number(req.params.id));
   if (!client) return res.status(404).json({ error: "Client not found." });
   res.json({ client: hydrateLumixClient(client) });
 });
@@ -456,8 +632,7 @@ app.put("/api/clients/:id/intake", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
+  const clientId = Number(req.params.id);
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
@@ -471,7 +646,7 @@ app.put("/api/clients/:id/intake", (req, res) => {
     pricePosition: String(req.body.pricePosition || "").trim(),
     mainCta: String(req.body.mainCta || "").trim(),
     rawNotes: {
-      notes: limitString(req.body.notes, 4000)
+      notes: String(req.body.notes || "").trim()
     }
   });
 
@@ -497,8 +672,7 @@ app.post("/api/clients/:id/recommendation", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
+  const clientId = Number(req.params.id);
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
@@ -532,16 +706,43 @@ app.post("/api/clients/:id/recommendation", async (req, res) => {
   }
 });
 
+app.patch("/api/clients/:id/strategy", (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  const clientId = Number(req.params.id);
+  const client = database.getClientById(user.agencyId, clientId);
+  if (!client) return res.status(404).json({ error: "Client not found." });
+
+  const homepageStructure = Array.isArray(req.body.homepageStructure)
+    ? req.body.homepageStructure.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+
+  const recommendation = database.upsertStrategyRecommendation(clientId, {
+    status: "approved",
+    positioning: String(req.body.positioning || "").trim(),
+    primaryOffer: String(req.body.primaryOffer || "").trim(),
+    primaryAudience: String(req.body.primaryAudience || "").trim(),
+    ctaStrategy: String(req.body.ctaStrategy || "").trim(),
+    homepageStructure,
+    contentAngles: client.strategyRecommendation?.contentAngles || []
+  });
+
+  res.json({
+    recommendation,
+    client: hydrateLumixClient(database.getClientById(user.agencyId, clientId))
+  });
+});
+
 app.post("/api/clients/:id/lumix-assist", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
+  const clientId = Number(req.params.id);
   const client = database.getClientById(user.agencyId, clientId);
   if (!client) return res.status(404).json({ error: "Client not found." });
 
-  const message = limitString(req.body.message, 2000);
+  const message = String(req.body.message || "").trim();
   if (!message) {
     return res.status(400).json({ error: "Message is required." });
   }
@@ -558,7 +759,7 @@ app.post("/api/clients/:id/lumix-assist", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Lumix assist failed."
+      error: error instanceof Error ? error.message : "EasyOnlinePresence assist failed."
     });
   }
 });
@@ -566,17 +767,11 @@ app.post("/api/clients/:id/lumix-assist", async (req, res) => {
 app.patch("/api/clients/:id", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
 
-  if (req.body.plan && !["starter", "growth", "scale"].includes(String(req.body.plan).trim())) {
-    return res.status(400).json({ error: "Invalid plan." });
-  }
-
-  const client = database.updateClient(user.agencyId, clientId, {
+  const client = database.updateClient(user.agencyId, Number(req.params.id), {
     businessName: req.body.businessName ? String(req.body.businessName).trim() : undefined,
     description: req.body.description ? String(req.body.description).trim() : undefined,
-    customPrompt: req.body.customPrompt !== undefined ? limitString(req.body.customPrompt, 4000) : undefined,
+    customPrompt: req.body.customPrompt !== undefined ? String(req.body.customPrompt).trim() : undefined,
     plan: req.body.plan ? String(req.body.plan).trim() : undefined,
     status: req.body.status ? String(req.body.status).trim() : undefined,
     billingStatus: req.body.billingStatus ? String(req.body.billingStatus).trim() : undefined,
@@ -593,9 +788,7 @@ app.patch("/api/clients/:id", (req, res) => {
 app.post("/api/clients/:id/generate", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const client = database.getClientById(user.agencyId, clientId);
+  const client = database.getClientById(user.agencyId, Number(req.params.id));
   if (!client) return res.status(404).json({ error: "Client not found." });
 
   const actionResult = runLumixAction("generate_pack", {
@@ -699,21 +892,14 @@ app.post("/api/clients/:id/generate-all", async (req, res) => {
 app.post("/api/clients/:id/checkout", async (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const client = database.getClientById(user.agencyId, clientId);
+  const client = database.getClientById(user.agencyId, Number(req.params.id));
   if (!client) return res.status(404).json({ error: "Client not found." });
-
-  const requestedPlan = req.body.plan ? String(req.body.plan).trim() : client.plan;
-  if (!["starter", "growth", "scale"].includes(requestedPlan)) {
-    return res.status(400).json({ error: "Invalid plan." });
-  }
 
   try {
     const checkout = await billing.createCheckoutSession({
       client,
       userEmail: user.email,
-      requestedPlan
+      requestedPlan: req.body.plan ? String(req.body.plan) : client.plan
     });
     res.json({ checkout });
   } catch (error) {
@@ -724,21 +910,10 @@ app.post("/api/clients/:id/checkout", async (req, res) => {
 app.post("/api/clients/:id/publish-targets", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
 
-  if (!isPlainObject(req.body.config || {})) {
-    return res.status(400).json({ error: "config must be an object." });
-  }
-
-  const platform = String(req.body.platform || "").trim();
-  if (!["wordpress", "webflow"].includes(platform)) {
-    return res.status(400).json({ error: "Unsupported publish platform." });
-  }
-
-  const target = database.createPublishTarget(user.agencyId, clientId, {
-    platform,
-    name: limitString(req.body.name, 120),
+  const target = database.createPublishTarget(user.agencyId, Number(req.params.id), {
+    platform: String(req.body.platform || "").trim(),
+    name: String(req.body.name || "").trim(),
     autoPublish: Boolean(req.body.autoPublish),
     status: "active",
     config: req.body.config || {}
@@ -751,21 +926,10 @@ app.post("/api/clients/:id/publish-targets", (req, res) => {
 app.patch("/api/clients/:id/publish-targets/:targetId", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  const targetId = readEntityIdOrFail(req, res, "targetId");
-  if (!clientId || !targetId) return;
 
-  if (req.body.config !== undefined && !isPlainObject(req.body.config)) {
-    return res.status(400).json({ error: "config must be an object." });
-  }
-
-  if (req.body.platform && !["wordpress", "webflow"].includes(String(req.body.platform).trim())) {
-    return res.status(400).json({ error: "Unsupported publish platform." });
-  }
-
-  const target = database.updatePublishTarget(user.agencyId, clientId, targetId, {
+  const target = database.updatePublishTarget(user.agencyId, Number(req.params.id), Number(req.params.targetId), {
     platform: req.body.platform ? String(req.body.platform).trim() : undefined,
-    name: req.body.name ? limitString(req.body.name, 120) : undefined,
+    name: req.body.name ? String(req.body.name).trim() : undefined,
     autoPublish: req.body.autoPublish !== undefined ? Boolean(req.body.autoPublish) : undefined,
     status: req.body.status ? String(req.body.status).trim() : undefined,
     config: req.body.config || undefined
@@ -778,15 +942,10 @@ app.patch("/api/clients/:id/publish-targets/:targetId", (req, res) => {
 app.post("/api/clients/:id/publish", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const client = database.getClientById(user.agencyId, clientId);
+  const client = database.getClientById(user.agencyId, Number(req.params.id));
   if (!client) return res.status(404).json({ error: "Client not found." });
 
-  const targetId = req.body.targetId ? parseEntityId(req.body.targetId) : null;
-  if (req.body.targetId && !targetId) {
-    return res.status(400).json({ error: "Invalid targetId." });
-  }
+  const targetId = req.body.targetId ? Number(req.body.targetId) : null;
   const actionResult = runLumixAction("publish_pack", {
     client,
     businessProfile: client.businessProfile,
@@ -835,27 +994,13 @@ app.put("/api/reports/settings", (req, res) => {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  if (recipients.some((recipient) => !isValidEmail(recipient))) {
-    return res.status(400).json({ error: "Recipients must be valid email addresses." });
-  }
-
-  const smtpPort = Number(req.body.smtpPort || 587);
-  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
-    return res.status(400).json({ error: "SMTP port must be between 1 and 65535." });
-  }
-
-  const fromEmail = String(req.body.fromEmail || "").trim();
-  if (fromEmail && !isValidEmail(fromEmail)) {
-    return res.status(400).json({ error: "fromEmail must be a valid email address." });
-  }
-
   const settings = database.upsertReportSettings(user.agencyId, {
-    smtpHost: limitString(req.body.smtpHost, 255),
-    smtpPort,
+    smtpHost: String(req.body.smtpHost || "").trim(),
+    smtpPort: Number(req.body.smtpPort || 587),
     smtpSecure: Boolean(req.body.smtpSecure),
-    smtpUser: limitString(req.body.smtpUser, 255),
-    smtpPass: limitString(req.body.smtpPass, 255),
-    fromEmail,
+    smtpUser: String(req.body.smtpUser || "").trim(),
+    smtpPass: String(req.body.smtpPass || "").trim(),
+    fromEmail: String(req.body.fromEmail || "").trim(),
     recipients
   });
 
@@ -883,9 +1028,7 @@ app.post("/api/scheduler/run-now", (req, res) => {
 });
 
 app.get("/api/public/clients/:id", (req, res) => {
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const clientRow = database.getClientRecordByAnyId(clientId);
+  const clientRow = database.getClientRecordByAnyId(Number(req.params.id));
   if (!clientRow || clientRow.status !== "active") {
     return res.status(404).json({ error: "Client page not found." });
   }
@@ -902,10 +1045,8 @@ app.get("/api/public/clients/:id", (req, res) => {
   });
 });
 
-app.post("/api/public/clients/:id/track", publicTrackRateLimit, (req, res) => {
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const clientRow = database.getClientRecordByAnyId(clientId);
+app.post("/api/public/clients/:id/track", (req, res) => {
+  const clientRow = database.getClientRecordByAnyId(Number(req.params.id));
   if (!clientRow || clientRow.status !== "active") {
     return res.status(404).json({ error: "Client page not found." });
   }
@@ -915,18 +1056,11 @@ app.post("/api/public/clients/:id/track", publicTrackRateLimit, (req, res) => {
     return res.status(400).json({ error: "Unsupported event type." });
   }
 
-  let metadata;
-  try {
-    metadata = readMetadata(req.body.metadata, 2000);
-  } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid metadata." });
-  }
-
   database.recordAnalyticsEvent(clientRow.id, {
-    sessionId: limitString(req.body.sessionId, 120) || null,
+    sessionId: String(req.body.sessionId || "").trim() || null,
     eventType,
-    referrer: limitString(req.body.referrer, 2048) || null,
-    metadata
+    referrer: String(req.body.referrer || "").trim() || null,
+    metadata: req.body.metadata || {}
   });
 
   res.json({
@@ -935,34 +1069,28 @@ app.post("/api/public/clients/:id/track", publicTrackRateLimit, (req, res) => {
   });
 });
 
-app.post("/api/public/clients/:id/lead", publicLeadRateLimit, (req, res) => {
-  const clientId = readEntityIdOrFail(req, res);
-  if (!clientId) return;
-  const clientRow = database.getClientRecordByAnyId(clientId);
+app.post("/api/public/clients/:id/lead", (req, res) => {
+  const clientRow = database.getClientRecordByAnyId(Number(req.params.id));
   if (!clientRow || clientRow.status !== "active") {
     return res.status(404).json({ error: "Client page not found." });
   }
 
   const email = String(req.body.email || "").trim();
-  const message = limitString(req.body.message, 2000);
+  const message = String(req.body.message || "").trim();
 
   if (!email || !message) {
     return res.status(400).json({ error: "email and message are required." });
   }
 
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: "Enter a valid email address." });
-  }
-
   const lead = database.createLead(clientRow.id, {
-    name: limitString(req.body.name, 120),
+    name: String(req.body.name || "").trim(),
     email,
     message,
-    source: limitString(req.body.source || "public_page", 120)
+    source: String(req.body.source || "public_page")
   });
 
   database.recordAnalyticsEvent(clientRow.id, {
-    sessionId: limitString(req.body.sessionId, 120) || null,
+    sessionId: String(req.body.sessionId || "").trim() || null,
     eventType: "lead_submit",
     referrer: null,
     metadata: {
@@ -978,15 +1106,15 @@ app.get("/client/:id", (_req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  res.redirect("/lumix");
-});
-
-app.get("/lumix", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+app.get("/lumix", (_req, res) => {
+  res.redirect(301, "/");
+});
+
 app.get("/webbom", (_req, res) => {
-  res.redirect("/lumix");
+  res.redirect("/");
 });
 
 app.get("/login", (_req, res) => {
@@ -997,8 +1125,16 @@ app.get("/register", (_req, res) => {
   res.sendFile(path.join(publicDir, "register.html"));
 });
 
+app.get("/welcome", (_req, res) => {
+  res.sendFile(path.join(publicDir, "welcome.html"));
+});
+
 app.get("/dashboard", (_req, res) => {
   res.sendFile(path.join(publicDir, "dashboard.html"));
+});
+
+app.get("/preview-large", (_req, res) => {
+  res.sendFile(path.join(publicDir, "preview-large.html"));
 });
 
 app.get("/app", (_req, res) => {
@@ -1006,9 +1142,9 @@ app.get("/app", (_req, res) => {
 });
 
 app.get("*", (_req, res) => {
-  res.redirect("/lumix");
+  res.redirect("/");
 });
 
 app.listen(port, host, () => {
-  console.log(`Lumix running on ${appUrl}`);
+  console.log(`EasyOnlinePresence running on ${appUrl}`);
 });

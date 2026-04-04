@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+import { getOpenAiApiKey } from "../openai-config.js";
 import { buildLumixContext, buildLumixPromptHeader, runLumixAction } from "../lumix.js";
 
 const strategySchema = {
@@ -117,15 +118,87 @@ function buildStrategyPrompt(client, suggestedRecommendation) {
 }
 
 function buildDemoStrategy(recommendation) {
+  return buildSavedStrategy(recommendation, {}, {
+    mode: "demo",
+    notice: "OPENAI_API_KEY puuttuu. Strategy generoitiin demo-tilassa."
+  });
+}
+
+function buildSavedStrategy(recommendation, overrides = {}, source = null) {
   return validateStrategy({
     ...recommendation,
+    ...overrides,
+    contentAngles:
+      Array.isArray(overrides.contentAngles) && overrides.contentAngles.length
+        ? overrides.contentAngles
+        : recommendation.contentAngles,
+    homepageStructure:
+      Array.isArray(overrides.homepageStructure) && overrides.homepageStructure.length
+        ? overrides.homepageStructure
+        : recommendation.homepageStructure,
     version: "v1",
     status: "approved",
-    source: {
-      mode: "demo",
-      notice: "OPENAI_API_KEY puuttuu. Strategy generoitiin demo-tilassa."
+    source
+  });
+}
+
+function buildOpenRouterJsonPrompt(prompt) {
+  return `${prompt}\n\nReturn only valid JSON. Do not use markdown fences. Do not add any explanation before or after the JSON.`;
+}
+
+function parseJsonOutput(outputText) {
+  const text = String(outputText || "").trim();
+  const parseWithRepairs = (value) =>
+    JSON.parse(
+      String(value)
+        .replace(/,\s*([}\]])/g, "$1")
+        .trim()
+    );
+
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    return JSON.parse(fencedMatch[1].trim());
+  }
+
+  const objectStart = text.indexOf("{");
+  const objectEnd = text.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return parseWithRepairs(text.slice(objectStart, objectEnd + 1));
+  }
+
+  return parseWithRepairs(text);
+}
+
+async function requestStructuredJson(client, { isOpenRouter, model, prompt, schemaName, schema, maxTokens }) {
+  if (isOpenRouter) {
+    const completion = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: buildOpenRouterJsonPrompt(prompt) }]
+    });
+
+    return parseJsonOutput(completion.choices[0]?.message?.content || "");
+  }
+
+  const response = await client.responses.create({
+    model,
+    max_output_tokens: maxTokens,
+    input: prompt,
+    text: {
+      format: {
+        type: "json_schema",
+        name: schemaName,
+        strict: true,
+        schema
+      }
     }
   });
+
+  return parseJsonOutput(response.output_text);
 }
 
 export async function generateAndSaveStrategy(database, clientId) {
@@ -146,37 +219,37 @@ export async function generateAndSaveStrategy(database, clientId) {
     throw new Error(actionResult.explanation?.reason || "Strategy generation is not allowed yet.");
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_STRATEGY_MODEL || process.env.OPENAI_MODEL || "gpt-5-mini";
+  const apiKey = getOpenAiApiKey();
+  const baseURL = process.env.OPENAI_BASE_URL;
+  const model = process.env.OPENAI_STRATEGY_MODEL || process.env.OPENAI_MODEL || "openai/gpt-4o-mini";
+  const isOpenRouter = baseURL?.includes("openrouter.ai");
   let strategy;
 
   if (!apiKey) {
     strategy = buildDemoStrategy(actionResult.recommendation);
   } else {
-    const openai = new OpenAI({ apiKey });
-    const response = await openai.responses.create({
-      model,
-      input: buildStrategyPrompt(client, actionResult.recommendation),
-      text: {
-        format: {
-          type: "json_schema",
-          name: "lumix_strategy",
-          strict: true,
-          schema: strategySchema
-        }
-      }
-    });
-
-    const parsed = JSON.parse(response.output_text);
-    strategy = validateStrategy({
-      ...parsed,
-      version: "v1",
-      status: "approved",
-      source: {
+    const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+    const prompt = buildStrategyPrompt(client, actionResult.recommendation);
+    try {
+      const parsed = await requestStructuredJson(openai, {
+        isOpenRouter,
+        model,
+        prompt,
+        schemaName: "lumix_strategy",
+        schema: strategySchema,
+        maxTokens: 400
+      });
+      strategy = buildSavedStrategy(actionResult.recommendation, parsed, {
         mode: "live",
         model
-      }
-    });
+      });
+    } catch {
+      strategy = buildSavedStrategy(actionResult.recommendation, {}, {
+        mode: "fallback",
+        model,
+        notice: "Live strategy response was incomplete. Recommendation fallback used."
+      });
+    }
   }
 
   database.saveClientStrategy(clientId, strategy);
