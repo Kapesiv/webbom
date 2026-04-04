@@ -164,8 +164,8 @@ const DASHBOARD_TRANSLATIONS = {
       aboutFor: "for",
       aboutBody: "with a focus on clear communication, dependable delivery, and a smooth customer experience from the first enquiry onward.",
       testimonialQuote: "We needed a clearer way to explain our service and make it easy for the right clients to get in touch. The new site finally does that.",
-      testimonialName: "Mika Laakso",
-      testimonialRoleSuffix: "client",
+      testimonialName: "Recent client",
+      testimonialRoleSuffix: "project",
       process1Title: "Initial discussion",
       process1Body: "We start by understanding your goals, offer, and what matters most to your customers.",
       process2Title: "Clear proposal",
@@ -349,8 +349,8 @@ const DASHBOARD_TRANSLATIONS = {
       aboutFor: "kohteelle",
       aboutBody: "keskittyen selkeään viestintään, luotettavaan toimitukseen ja sujuvaan asiakaskokemukseen ensimmäisestä yhteydenotosta alkaen.",
       testimonialQuote: "Tarvitsimme selkeämmän tavan kertoa palvelustamme ja tehdä oikeille asiakkaille yhteydenotosta helppoa. Uusi sivu tekee sen vihdoin.",
-      testimonialName: "Mika Laakso",
-      testimonialRoleSuffix: "asiakas",
+      testimonialName: "Asiakasprojekti",
+      testimonialRoleSuffix: "projekti",
       process1Title: "Aloituskeskustelu",
       process1Body: "Aloitamme ymmärtämällä tavoitteesi, tarjouksesi ja sen mikä merkitsee eniten asiakkaillesi.",
       process2Title: "Selkeä ehdotus",
@@ -953,6 +953,10 @@ function getPreviewCta(client) {
   return String(client?.website?.cta || client?.strategyRecommendation?.ctaStrategy || "").trim() || dt().site.requestConsultation;
 }
 
+function getPreviewSecondaryCta(client) {
+  return String(client?.website?.secondaryCta || "").trim() || dt().site.seeServices;
+}
+
 function getPreviewAudience(client) {
   return String(client?.strategyRecommendation?.primaryAudience || "").trim() || dt().site.defaultAudience;
 }
@@ -962,9 +966,17 @@ function getPreviewOffer(client) {
 }
 
 function getPreviewServices(client) {
+  const websiteServices = Array.isArray(client?.website?.services) ? client.website.services : [];
   const offer = getPreviewOffer(client);
   const audience = getPreviewAudience(client);
   const angles = Array.isArray(client?.strategyRecommendation?.contentAngles) ? client.strategyRecommendation.contentAngles : [];
+
+  if (websiteServices.length) {
+    return websiteServices.slice(0, 3).map((service) => ({
+      title: String(service?.title || "").trim() || offer,
+      body: truncateText(String(service?.body || "").trim(), 130)
+    }));
+  }
 
   return [
     {
@@ -982,21 +994,21 @@ function getPreviewServices(client) {
   ];
 }
 
-function getPreviewAboutCopy(client) {
-  const description = String(client?.description || "").trim();
-  const audience = getPreviewAudience(client);
-  const offer = getPreviewOffer(client);
-
-  return (
-    firstSentence(description) ||
-    `${getPreviewBusinessName(client)} ${dt().site.aboutFallback} ${offer} ${dt().site.aboutFor} ${audience}, ${dt().site.aboutBody}`
-  );
-}
-
 function getPreviewTestimonial(client) {
+  const websiteTestimonials = Array.isArray(client?.website?.testimonials) ? client.website.testimonials : [];
   const offer = getPreviewOffer(client);
   const audience = getPreviewAudience(client);
   const blogExcerpt = firstSentence(client?.blogs?.[0]?.excerpt || "");
+
+  if (websiteTestimonials.length) {
+    const item = websiteTestimonials[0];
+    return {
+      quote: String(item?.quote || "").trim() || blogExcerpt || dt().site.testimonialQuote,
+      name: String(item?.name || "").trim() || dt().site.testimonialName,
+      role: String(item?.role || "").trim() || `${audience.charAt(0).toUpperCase() + audience.slice(1)} ${dt().site.testimonialRoleSuffix}`,
+      context: offer
+    };
+  }
 
   return {
     quote:
@@ -1009,7 +1021,17 @@ function getPreviewTestimonial(client) {
 }
 
 function getPreviewProcess(client) {
+  const websiteSteps = Array.isArray(client?.website?.processSteps) ? client.website.processSteps : [];
   const cta = getPreviewCta(client);
+
+  if (websiteSteps.length) {
+    return websiteSteps.slice(0, 3).map((item, index) => ({
+      step: String(index + 1),
+      title: String(item?.title || "").trim(),
+      body: String(item?.body || "").trim()
+    }));
+  }
+
   return [
     {
       step: "1",
@@ -1035,13 +1057,14 @@ function renderFallbackLandingPreview(client) {
   const headline = getPreviewHeadline(client);
   const subheadline = getPreviewSubheadline(client);
   const cta = getPreviewCta(client);
+  const secondaryCta = getPreviewSecondaryCta(client);
   const services = getPreviewServices(client);
-  const aboutCopy = getPreviewAboutCopy(client);
   const testimonial = getPreviewTestimonial(client);
   const process = getPreviewProcess(client);
+  const website = client?.website || {};
   const seoTitle = String(client?.seo?.title || "").trim();
   const footerDescription = truncateText(
-    String(client?.seo?.metaDescription || client?.description || "").trim() || subheadline,
+    String(website.footerNote || client?.seo?.metaDescription || client?.description || "").trim() || subheadline,
     120
   );
 
@@ -1059,12 +1082,12 @@ function renderFallbackLandingPreview(client) {
 
           <section class="guided-site-hero">
             <div class="guided-site-hero-copy">
-              <span class="guided-site-kicker">${escapeHtml(strings.kickerTrusted)}</span>
+              <span class="guided-site-kicker">${escapeHtml(String(website.heroKicker || strings.kickerTrusted))}</span>
               <h3>${escapeHtml(headline)}</h3>
               <p>${escapeHtml(subheadline)}</p>
               <div class="guided-site-action-row">
                 <span class="guided-site-button guided-site-button-primary">${escapeHtml(cta)}</span>
-                <span class="guided-site-button guided-site-button-secondary">${escapeHtml(strings.seeServices)}</span>
+                <span class="guided-site-button guided-site-button-secondary">${escapeHtml(secondaryCta)}</span>
               </div>
             </div>
 
@@ -1087,8 +1110,9 @@ function renderFallbackLandingPreview(client) {
           <section class="guided-site-section">
             <div class="guided-site-section-head">
               <span class="guided-site-kicker">${escapeHtml(strings.servicesKicker)}</span>
-              <h4>${escapeHtml(strings.servicesTitle)}</h4>
+              <h4>${escapeHtml(String(website.servicesTitle || strings.servicesTitle))}</h4>
             </div>
+            ${website.servicesIntro ? `<p class="guided-site-section-intro">${escapeHtml(website.servicesIntro)}</p>` : ""}
             <div class="guided-site-service-grid">
               ${services
                 .map(
@@ -1105,35 +1129,32 @@ function renderFallbackLandingPreview(client) {
 
           <section class="guided-site-section guided-site-section-split">
             <div>
-              <span class="guided-site-kicker">${escapeHtml(strings.aboutKicker)}</span>
-              <h4>${escapeHtml(strings.aboutTitle)}</h4>
-              <p>${escapeHtml(aboutCopy)}</p>
+              <div class="guided-site-section-head">
+                <span class="guided-site-kicker">${escapeHtml(strings.aboutKicker)}</span>
+                <h4>${escapeHtml(strings.aboutTitle)}</h4>
+              </div>
+              <div class="guided-site-proof-grid">
+                <div class="guided-site-credibility-card">
+                  <strong>${escapeHtml(seoTitle || `${name} | ${strings.seoFallbackTitleSuffix}`)}</strong>
+                  <p>${escapeHtml(footerDescription)}</p>
+                </div>
+                <blockquote class="guided-site-testimonial">
+                  <p>${escapeHtml(`“${testimonial.quote}”`)}</p>
+                  <footer>
+                    <strong>${escapeHtml(testimonial.name)}</strong>
+                    <span>${escapeHtml(`${testimonial.role} • ${testimonial.context}`)}</span>
+                  </footer>
+                </blockquote>
+              </div>
             </div>
-            <div class="guided-site-credibility-card">
-              <strong>${escapeHtml(seoTitle || `${name} | ${strings.seoFallbackTitleSuffix}`)}</strong>
-              <p>${escapeHtml(footerDescription)}</p>
-            </div>
-          </section>
-
-          <section class="guided-site-section">
-            <div class="guided-site-section-head">
-              <span class="guided-site-kicker">${escapeHtml(strings.testimonialKicker)}</span>
-              <h4>${escapeHtml(strings.testimonialTitle)}</h4>
-            </div>
-            <blockquote class="guided-site-testimonial">
-              <p>${escapeHtml(`“${testimonial.quote}”`)}</p>
-              <footer>
-                <strong>${escapeHtml(testimonial.name)}</strong>
-                <span>${escapeHtml(`${testimonial.role} • ${testimonial.context}`)}</span>
-              </footer>
-            </blockquote>
           </section>
 
           <section class="guided-site-section">
             <div class="guided-site-section-head">
               <span class="guided-site-kicker">${escapeHtml(strings.processKicker)}</span>
-              <h4>${escapeHtml(strings.processTitle)}</h4>
+              <h4>${escapeHtml(String(website.processTitle || strings.processTitle))}</h4>
             </div>
+            ${website.processIntro ? `<p class="guided-site-section-intro">${escapeHtml(website.processIntro)}</p>` : ""}
             <div class="guided-site-process-grid">
               ${process
                 .map(
@@ -1152,8 +1173,8 @@ function renderFallbackLandingPreview(client) {
           <section class="guided-site-final-cta">
             <div>
               <span class="guided-site-kicker">${escapeHtml(strings.contactKicker)}</span>
-              <h4>${escapeHtml(strings.contactTitle)}</h4>
-              <p>${escapeHtml(strings.contactCopy)}</p>
+              <h4>${escapeHtml(String(website.ctaHeadline || strings.contactTitle))}</h4>
+              <p>${escapeHtml(String(website.ctaBody || strings.contactCopy))}</p>
             </div>
             <span class="guided-site-button guided-site-button-primary">${escapeHtml(cta)}</span>
           </section>

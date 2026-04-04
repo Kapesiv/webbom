@@ -3308,9 +3308,7 @@ textarea {
 }
 
 .generated-site section + section {
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
+  margin-top: clamp(60px, 7vw, 80px);
 }
 
 .generated-site a {
@@ -3339,15 +3337,15 @@ textarea {
   --site-muted: rgba(235, 225, 214, 0.68);
   --site-accent: #d5b086;
   --site-accent-soft: rgba(213, 176, 134, 0.1);
-  padding: clamp(24px, 3vw, 36px);
-  border-radius: 30px;
+  padding: clamp(20px, 2.4vw, 28px);
+  border-radius: 18px;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 30%),
     radial-gradient(circle at 88% 16%, var(--site-accent-soft), transparent 22%),
     linear-gradient(180deg, rgba(22, 17, 14, 0.98), rgba(16, 12, 10, 0.98));
   color: var(--site-text);
   border: 1px solid var(--site-border);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
 }
 
 .generated-site.generated-site-family-product-command {
@@ -3406,13 +3404,13 @@ textarea {
 
 .generated-site p,
 .generated-site li {
-  font-size: clamp(0.92rem, 1.15vw, 1.02rem);
-  line-height: 1.66;
+  font-size: clamp(1rem, 1.2vw, 1.125rem);
+  line-height: 1.7;
 }
 
 .generated-site h2 {
   margin: 0;
-  font-size: clamp(1.55rem, 2.3vw, 2rem);
+  font-size: clamp(1.75rem, 2.2vw, 2rem);
   line-height: 1.08;
   letter-spacing: -0.04em;
 }
@@ -3740,7 +3738,7 @@ textarea {
   z-index: 1;
   border: 1px solid var(--site-border);
   background: var(--site-surface);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
 }
 
 .generated-site .site-topbar,
@@ -3749,8 +3747,8 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 22px;
-  border-radius: 24px;
+  padding: 14px 16px;
+  border-radius: 12px;
 }
 
 .generated-site .site-topbar strong,
@@ -3776,13 +3774,13 @@ textarea {
   overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
-  gap: 28px;
+  gap: 18px;
   align-items: stretch;
-  padding: 32px;
-  border-radius: 30px;
+  padding: 20px;
+  border-radius: 14px;
   background:
-    radial-gradient(circle at 82% 18%, var(--site-accent-soft), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+    radial-gradient(circle at 82% 18%, var(--site-accent-soft), transparent 18%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.012)),
     rgba(255, 255, 255, 0.02);
 }
 
@@ -3795,31 +3793,32 @@ textarea {
 .generated-site .site-hero-copy {
   display: grid;
   align-content: start;
+  max-width: 700px;
 }
 
 .generated-site .site-hero-copy h1 {
-  margin: 10px 0 0;
-  max-width: 10.8ch;
+  margin: 8px 0 0;
+  max-width: 700px;
   font-family: "Sora", "Manrope", sans-serif;
-  font-size: clamp(2.95rem, 4vw, 3.65rem);
-  line-height: 0.98;
-  letter-spacing: -0.05em;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1.04;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 
 .generated-site .site-hero-copy > p {
-  max-width: 48ch;
-  margin: 16px 0 0;
-  color: var(--site-muted);
-  font-size: clamp(1rem, 1.14vw, 1.06rem);
-  line-height: 1.72;
+  max-width: 500px;
+  margin: 10px 0 0;
+  color: rgba(235, 225, 214, 0.78);
+  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  line-height: 1.64;
 }
 
 .generated-site .site-action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 22px;
+  margin-top: 16px;
 }
 
 .generated-site .site-action-row a,
@@ -3827,13 +3826,13 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
+  min-height: 44px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: var(--site-accent);
   color: #17110d;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 700;
 }
 
@@ -3847,14 +3846,14 @@ textarea {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 26px;
+  margin-top: 16px;
 }
 
 .generated-site .site-trust-chip {
-  padding: 14px 15px;
+  padding: 10px 12px;
   border: 1px solid var(--site-border);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .generated-site .site-trust-chip span {
@@ -3868,14 +3867,14 @@ textarea {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: 420px;
+  min-height: 320px;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-template-rows: auto 1fr auto;
-  gap: 14px;
-  padding: 18px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--site-border);
-  border-radius: 26px;
+  border-radius: 12px;
   background:
     linear-gradient(180deg, rgba(17, 13, 10, 0.28), rgba(17, 13, 10, 0.48)),
     rgba(255, 255, 255, 0.02);
@@ -3904,11 +3903,11 @@ textarea {
 .generated-site .site-hero-pane {
   position: relative;
   z-index: 1;
-  padding: 18px;
+  padding: 14px;
   border: 1px solid rgba(255, 247, 238, 0.12);
-  border-radius: 20px;
-  background: rgba(18, 14, 12, 0.5);
-  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  background: rgba(18, 14, 12, 0.38);
+  backdrop-filter: blur(4px);
 }
 
 .generated-site .site-hero-pane span,
@@ -3930,7 +3929,7 @@ textarea {
 .generated-site .site-process-step h3,
 .generated-site .site-proof-summary > strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--site-text);
   font-family: "Sora", "Manrope", sans-serif;
   line-height: 1.14;
@@ -3938,7 +3937,7 @@ textarea {
 }
 
 .generated-site .site-hero-pane strong {
-  font-size: clamp(1.08rem, 1.45vw, 1.3rem);
+  font-size: clamp(1.125rem, 1.4vw, 1.35rem);
 }
 
 .generated-site .site-hero-pane p,
@@ -3949,8 +3948,10 @@ textarea {
 .generated-site .site-footer p,
 .generated-site .site-cta p,
 .generated-site .site-section-head p {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--site-muted);
+  font-size: clamp(1rem, 1.08vw, 1.08rem);
+  line-height: 1.7;
 }
 
 .generated-site .site-hero-pane-primary {
@@ -3971,19 +3972,19 @@ textarea {
 }
 
 .generated-site .site-section {
-  padding: 28px;
-  border-radius: 28px;
+  padding: 20px;
+  border-radius: 12px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.012)),
+    rgba(255, 255, 255, 0.016);
 }
 
 .generated-site .site-section-head {
   display: grid;
   grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
-  gap: 18px;
+  gap: 12px;
   align-items: end;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
 
 .generated-site .site-section-head > div {
@@ -3996,9 +3997,9 @@ textarea {
   margin: 0;
   max-width: 12ch;
   font-family: "Sora", "Manrope", sans-serif;
-  font-size: clamp(1.95rem, 2.45vw, 2.35rem);
-  line-height: 1.02;
-  letter-spacing: -0.045em;
+  font-size: clamp(1.75rem, 2vw, 2rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
 }
 
 .generated-site .site-card-grid,
@@ -4013,8 +4014,8 @@ textarea {
 .generated-site .site-testimonial-card,
 .generated-site .site-proof-summary {
   border: 1px solid var(--site-border);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .generated-site .site-card {
@@ -4030,13 +4031,13 @@ textarea {
 .generated-site .site-process-step,
 .generated-site .site-testimonial-card,
 .generated-site .site-proof-summary {
-  padding: 22px;
+  padding: 16px;
 }
 
 .generated-site .site-card h3,
 .generated-site .site-process-step h3 {
   margin: 0;
-  font-size: clamp(1.14rem, 1.48vw, 1.34rem);
+  font-size: clamp(1.25rem, 1.6vw, 1.5rem);
 }
 
 .generated-site .site-section-proof {
@@ -4053,19 +4054,19 @@ textarea {
 }
 
 .generated-site .site-proof-summary > strong {
-  font-size: clamp(1.2rem, 1.7vw, 1.48rem);
+  font-size: clamp(1.25rem, 1.6vw, 1.5rem);
 }
 
 .generated-site .site-proof-list {
   list-style: none;
-  margin: 18px 0 0;
+  margin: 14px 0 0;
   padding: 0;
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .generated-site .site-proof-list li {
-  padding-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid var(--site-border);
 }
 
@@ -4089,7 +4090,7 @@ textarea {
 .generated-site .site-testimonial-card p {
   margin: 0;
   color: var(--site-text);
-  line-height: 1.8;
+  line-height: 1.72;
 }
 
 .generated-site .site-testimonial-card footer {
@@ -4106,7 +4107,7 @@ textarea {
 .generated-site .site-process-step span {
   width: 36px;
   height: 36px;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 247, 238, 0.14);
   background: rgba(255, 255, 255, 0.04);
 }
@@ -4116,8 +4117,8 @@ textarea {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 20px;
-  padding: 28px;
-  border-radius: 28px;
+  padding: 20px;
+  border-radius: 12px;
   background:
     radial-gradient(circle at top right, var(--site-accent-soft), transparent 28%),
     var(--site-surface-strong);
@@ -4160,11 +4161,11 @@ textarea {
   .generated-site .site-hero,
   .generated-site .site-section,
   .generated-site .site-cta {
-    padding: 22px;
+    padding: 18px;
   }
 
   .generated-site .site-hero-copy h1 {
-    font-size: clamp(2.3rem, 8.5vw, 3rem);
+    font-size: clamp(2rem, 8vw, 2.75rem);
   }
 
   .generated-site .site-hero-panel {
@@ -6473,7 +6474,7 @@ body.dashboard-drawer-open {
 
 .guided-site-preview {
   display: grid;
-  gap: 14px;
+  gap: clamp(60px, 7vw, 80px);
   color: #221914;
 }
 
@@ -6517,13 +6518,13 @@ body.dashboard-drawer-open {
 .guided-site-section,
 .guided-site-final-cta {
   border-radius: 4px;
-  padding: 20px;
+  padding: 18px;
 }
 
 .guided-site-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.8fr);
-  gap: 24px;
+  gap: 18px;
   background:
     radial-gradient(circle at top right, rgba(216, 180, 130, 0.16), transparent 26%),
     linear-gradient(180deg, #f7f1ea 0%, #f5efe8 100%);
@@ -6550,26 +6551,27 @@ body.dashboard-drawer-open {
 }
 
 .guided-site-hero-copy h3 {
-  max-width: 12ch;
-  font-size: clamp(1.9rem, 3.2vw, 3rem);
-  line-height: 1;
+  max-width: 700px;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1.04;
 }
 
 .guided-site-hero-copy p,
 .guided-site-section p,
 .guided-site-final-cta p,
 .guided-site-footer p {
-  margin: 14px 0 0;
+  max-width: 500px;
+  margin: 10px 0 0;
   color: rgba(56, 40, 29, 0.78);
-  font-size: 1rem;
-  line-height: 1.75;
+  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  line-height: 1.64;
 }
 
 .guided-site-action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 .guided-site-button {
@@ -6629,20 +6631,35 @@ body.dashboard-drawer-open {
 .guided-site-service-card strong,
 .guided-site-process-card strong {
   display: block;
-  margin-top: 10px;
+  margin-top: 8px;
   color: #1f1611;
   font-size: 1rem;
   letter-spacing: -0.03em;
+}
+
+.guided-site-card-label {
+  display: inline-flex;
+  align-items: center;
+  color: #8c6a45;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .guided-site-section-head {
   margin-bottom: 18px;
 }
 
+.guided-site-section-intro {
+  margin: 0 0 18px;
+  max-width: 58ch;
+}
+
 .guided-site-section h4,
 .guided-site-final-cta h4 {
-  font-size: clamp(1.5rem, 2.8vw, 2.2rem);
-  line-height: 1.02;
+  font-size: clamp(1.75rem, 2vw, 2rem);
+  line-height: 1.08;
 }
 
 .guided-site-service-grid {
@@ -6652,12 +6669,18 @@ body.dashboard-drawer-open {
 .guided-site-service-card,
 .guided-site-process-card,
 .guided-site-credibility-card {
-  padding: 18px;
+  padding: 16px;
+}
+
+.guided-site-proof-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1fr);
+  gap: 18px;
 }
 
 .guided-site-section-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  grid-template-columns: 1fr;
   gap: 18px;
 }
 
@@ -6796,6 +6819,7 @@ body.dashboard-drawer-open {
   .guided-preview-list,
   .guided-site-service-grid,
   .guided-site-process-grid,
+  .guided-site-proof-grid,
   .guided-site-section-split,
   .guided-site-hero {
     grid-template-columns: 1fr;
