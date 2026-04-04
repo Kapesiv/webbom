@@ -118,6 +118,131 @@ function getGenerateDecision(client) {
   };
 }
 
+function getOnboardingBusinessConfig(choice) {
+  if (choice === "local_service") {
+    return {
+      businessType: "local_service",
+      offerType: "service",
+      audienceType: "local_customers"
+    };
+  }
+
+  if (choice === "premium_studio") {
+    return {
+      businessType: "local_service",
+      offerType: "service",
+      audienceType: "consumers"
+    };
+  }
+
+  if (choice === "expert_business") {
+    return {
+      businessType: "b2b_service",
+      offerType: "service",
+      audienceType: "small_businesses"
+    };
+  }
+
+  return {
+    businessType: "b2b_service",
+    offerType: "service",
+    audienceType: "consumers"
+  };
+}
+
+function getOnboardingGoalConfig(choice) {
+  if (choice === "bookings") {
+    return {
+      goalType: "bookings",
+      mainCta: "Book now"
+    };
+  }
+
+  if (choice === "trust") {
+    return {
+      goalType: "awareness",
+      mainCta: "Learn more"
+    };
+  }
+
+  return {
+    goalType: "lead_generation",
+    mainCta: "Request a quote"
+  };
+}
+
+function getOnboardingToneConfig(choice) {
+  if (choice === "premium_bold") {
+    return {
+      toneType: "premium",
+      pricePosition: "premium"
+    };
+  }
+
+  if (choice === "calm_elegant") {
+    return {
+      toneType: "friendly",
+      pricePosition: "premium"
+    };
+  }
+
+  return {
+    toneType: "trusted",
+    pricePosition: "standard"
+  };
+}
+
+function sanitizeOtherValue(value) {
+  return String(value || "").trim().slice(0, 240);
+}
+
+function buildOnboardingSummary(answers) {
+  return [
+    `Business direction: ${answers.businessTypeChoiceLabel}${answers.businessTypeOther ? ` (${answers.businessTypeOther})` : ""}.`,
+    `Primary goal: ${answers.goalChoiceLabel}${answers.goalOther ? ` (${answers.goalOther})` : ""}.`,
+    `Preferred feel: ${answers.toneChoiceLabel}${answers.toneOther ? ` (${answers.toneOther})` : ""}.`,
+    `Privacy feel: ${answers.privacyChoiceLabel}${answers.privacyOther ? ` (${answers.privacyOther})` : ""}.`,
+    `Visual direction: ${answers.visualChoiceLabel}${answers.visualOther ? ` (${answers.visualOther})` : ""}.`
+  ].join(" ");
+}
+
+function getOnboardingAnswerLabel(group, choice) {
+  const labels = {
+    businessType: {
+      local_service: "Local service",
+      premium_studio: "Premium studio or brand",
+      expert_business: "Business or expert company",
+      other: "Other"
+    },
+    goal: {
+      leads: "Get leads",
+      bookings: "Get bookings",
+      trust: "Build trust",
+      other: "Other"
+    },
+    tone: {
+      premium_bold: "Premium and bold",
+      calm_elegant: "Calm and elegant",
+      clear_trustworthy: "Clear and trustworthy",
+      other: "Other"
+    },
+    privacy: {
+      public_visible: "Public and visible",
+      polished_restrained: "Polished but restrained",
+      private_discreet: "Private and discreet",
+      other: "Other"
+    },
+    visual: {
+      minimal_clean: "Minimal and clean",
+      rich_visual: "Rich and visual",
+      product_ui: "Structured and product-like",
+      other: "Other"
+    }
+  };
+
+  return labels[group]?.[choice] || "Other";
+}
+
 async function generateAndPersistClient(clientId, mode) {
   const clientRow = database.getClientRecordByAnyId(clientId);
   if (!clientRow) throw new Error("Client not found.");
@@ -313,6 +438,95 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/auth/onboarding", (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const forceNewClient = Boolean(req.body.forceNewClient);
+
+  const businessTypeChoice = String(req.body.businessTypeChoice || "").trim() || "other";
+  const goalChoice = String(req.body.goalChoice || "").trim() || "leads";
+  const toneChoice = String(req.body.toneChoice || "").trim() || "clear_trustworthy";
+  const privacyChoice = String(req.body.privacyChoice || "").trim() || "polished_restrained";
+  const visualChoice = String(req.body.visualChoice || "").trim() || "minimal_clean";
+
+  const answers = {
+    businessTypeChoice,
+    businessTypeChoiceLabel: getOnboardingAnswerLabel("businessType", businessTypeChoice),
+    businessTypeOther: sanitizeOtherValue(req.body.businessTypeOther),
+    goalChoice,
+    goalChoiceLabel: getOnboardingAnswerLabel("goal", goalChoice),
+    goalOther: sanitizeOtherValue(req.body.goalOther),
+    toneChoice,
+    toneChoiceLabel: getOnboardingAnswerLabel("tone", toneChoice),
+    toneOther: sanitizeOtherValue(req.body.toneOther),
+    privacyChoice,
+    privacyChoiceLabel: getOnboardingAnswerLabel("privacy", privacyChoice),
+    privacyOther: sanitizeOtherValue(req.body.privacyOther),
+    visualChoice,
+    visualChoiceLabel: getOnboardingAnswerLabel("visual", visualChoice),
+    visualOther: sanitizeOtherValue(req.body.visualOther)
+  };
+
+  const onboardingSummary = buildOnboardingSummary(answers);
+  const businessConfig = getOnboardingBusinessConfig(businessTypeChoice);
+  const goalConfig = getOnboardingGoalConfig(goalChoice);
+  const toneConfig = getOnboardingToneConfig(toneChoice);
+  const existingClients = database.listClientsForAgency(user.agencyId);
+  const client =
+    (!forceNewClient && existingClients[0]) ||
+    database.createClient(user.agencyId, user.id, {
+      businessName: forceNewClient ? `New Website ${existingClients.length + 1}` : user.agencyName || "New business",
+      description: "",
+      customPrompt: "",
+      plan: "starter"
+    });
+
+  const businessProfile = database.upsertBusinessProfile(client.id, {
+    ...businessConfig,
+    ...goalConfig,
+    ...toneConfig,
+    rawNotes: {
+      notes: onboardingSummary,
+      onboardingSummary,
+      privacyPreference: privacyChoice,
+      visualIntensity: visualChoice,
+      otherBusinessType: answers.businessTypeOther,
+      otherGoal: answers.goalOther,
+      otherTone: answers.toneOther,
+      otherPrivacy: answers.privacyOther,
+      otherVisual: answers.visualOther,
+      businessTypeLabel: answers.businessTypeChoiceLabel,
+      goalLabel: answers.goalChoiceLabel,
+      toneLabel: answers.toneChoiceLabel,
+      privacyLabel: answers.privacyChoiceLabel,
+      visualLabel: answers.visualChoiceLabel
+    }
+  });
+
+  const intakeAnswers = database.saveIntakeAnswers(client.id, [
+    { questionKey: "business_type", answerValue: businessProfile.businessType, answerLabel: answers.businessTypeChoiceLabel },
+    { questionKey: "offer_type", answerValue: businessProfile.offerType, answerLabel: businessProfile.offerType },
+    { questionKey: "audience_type", answerValue: businessProfile.audienceType, answerLabel: businessProfile.audienceType },
+    { questionKey: "goal_type", answerValue: businessProfile.goalType, answerLabel: answers.goalChoiceLabel },
+    { questionKey: "tone_type", answerValue: businessProfile.toneType, answerLabel: answers.toneChoiceLabel },
+    { questionKey: "price_position", answerValue: businessProfile.pricePosition, answerLabel: businessProfile.pricePosition },
+    { questionKey: "main_cta", answerValue: businessProfile.mainCta, answerLabel: businessProfile.mainCta },
+    { questionKey: "privacy_preference", answerValue: privacyChoice, answerLabel: answers.privacyChoiceLabel },
+    { questionKey: "visual_intensity", answerValue: visualChoice, answerLabel: answers.visualChoiceLabel }
+  ]);
+
+  const refreshedUser = database.markUserOnboardingComplete(user.id);
+  const refreshedClient = hydrateLumixClient(database.getClientById(user.agencyId, client.id));
+
+  res.json({
+    ok: true,
+    user: refreshedUser,
+    client: refreshedClient,
+    businessProfile,
+    intakeAnswers
+  });
+});
+
 app.get("/api/jobs", (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
@@ -490,6 +704,34 @@ app.post("/api/clients/:id/recommendation", async (req, res) => {
       lumixAction: lumixActionPayload(actionResult)
     });
   }
+});
+
+app.patch("/api/clients/:id/strategy", (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  const clientId = Number(req.params.id);
+  const client = database.getClientById(user.agencyId, clientId);
+  if (!client) return res.status(404).json({ error: "Client not found." });
+
+  const homepageStructure = Array.isArray(req.body.homepageStructure)
+    ? req.body.homepageStructure.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+
+  const recommendation = database.upsertStrategyRecommendation(clientId, {
+    status: "approved",
+    positioning: String(req.body.positioning || "").trim(),
+    primaryOffer: String(req.body.primaryOffer || "").trim(),
+    primaryAudience: String(req.body.primaryAudience || "").trim(),
+    ctaStrategy: String(req.body.ctaStrategy || "").trim(),
+    homepageStructure,
+    contentAngles: client.strategyRecommendation?.contentAngles || []
+  });
+
+  res.json({
+    recommendation,
+    client: hydrateLumixClient(database.getClientById(user.agencyId, clientId))
+  });
 });
 
 app.post("/api/clients/:id/lumix-assist", async (req, res) => {
@@ -881,6 +1123,10 @@ app.get("/login", (_req, res) => {
 
 app.get("/register", (_req, res) => {
   res.sendFile(path.join(publicDir, "register.html"));
+});
+
+app.get("/welcome", (_req, res) => {
+  res.sendFile(path.join(publicDir, "welcome.html"));
 });
 
 app.get("/dashboard", (_req, res) => {

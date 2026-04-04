@@ -1,384 +1,44 @@
 <!DOCTYPE html>
-<html lang="fi">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard | Lumix</title>
+    <title>Lumix Workflow</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="page-shell page-shell-dashboard">
-      <section class="dashboard-shell">
-        <aside class="dashboard-icon-rail" aria-label="Primary navigation">
-          <div class="dashboard-icon-rail-top">
-            <button
-              type="button"
-              class="icon-rail-button icon-rail-button-active"
-              data-rail-target="workspace"
-              aria-label="Workspace"
-            >
-              <span>L</span>
-            </button>
-            <button type="button" class="icon-rail-button" data-rail-target="flow" aria-label="Flow">
-              <span>F</span>
-            </button>
-            <button type="button" class="icon-rail-button" data-rail-target="clients" aria-label="Clients">
-              <span>C</span>
-            </button>
-            <span class="icon-rail-divider" aria-hidden="true"></span>
-            <button type="button" class="icon-rail-button" data-rail-target="new-client" aria-label="New client">
-              <span>+</span>
-            </button>
-            <button type="button" class="icon-rail-button" data-rail-target="advanced" aria-label="Advanced settings">
-              <span>S</span>
-            </button>
+  <body class="guided-dashboard-body">
+    <main class="guided-workflow">
+      <aside class="guided-progress" aria-label="Workflow progress">
+        <a href="/" class="guided-brand" aria-label="Lumix home">
+          <span class="guided-brand-mark" aria-hidden="true"></span>
+          <span class="guided-brand-name">Lumix</span>
+        </a>
+
+        <div id="guided-step-list" class="guided-step-list"></div>
+      </aside>
+
+      <section class="guided-workspace">
+        <header class="guided-topbar">
+          <div class="guided-topbar-copy">
+            <span class="guided-kicker">Guided workflow</span>
+            <h1 id="guided-workspace-name">Lumix Workspace</h1>
           </div>
 
-          <div class="dashboard-icon-rail-bottom">
-            <button type="button" class="icon-rail-avatar" id="icon-rail-profile-button" aria-label="Profile menu">
-              <span id="icon-rail-avatar-label">LU</span>
-            </button>
-          </div>
-        </aside>
-
-        <aside class="client-rail dashboard-sidebar">
-          <div class="dashboard-sidebar-panel">
-            <div class="dashboard-sidebar-head">
-              <button type="button" id="workspace-switcher-button" class="workspace-switcher-button">
-                <span class="workspace-switcher-mark">L</span>
-                <span class="workspace-switcher-copy">
-                  <strong id="sidebar-brand-title">Lumix Workspace</strong>
-                  <span id="sidebar-brand-subtitle">Guided marketing system</span>
-                </span>
-                <span class="workspace-switcher-caret">▾</span>
-              </button>
-            </div>
-
-            <label class="dashboard-sidebar-search" aria-label="Search clients">
-              <span class="sidebar-search-icon">⌕</span>
-              <input id="sidebar-search" type="search" placeholder="Search clients or workflow" />
+          <div class="guided-topbar-actions">
+            <button id="guided-new-website" class="guided-secondary-button" type="button">New website</button>
+            <label class="guided-client-select-wrap" aria-label="Select active client">
+              <span>Client</span>
+              <select id="guided-client-switcher"></select>
             </label>
-
-            <nav class="dashboard-sidebar-groups" aria-label="Workspace sections">
-              <section class="sidebar-group">
-                <span class="sidebar-group-label">Workspace</span>
-                <button type="button" class="sidebar-nav-item sidebar-nav-item-active" data-sidebar-target="workspace">
-                  <span class="sidebar-nav-icon">◈</span>
-                  <span class="sidebar-nav-copy">
-                    <strong>Overview</strong>
-                    <small>Current workspace pulse</small>
-                  </span>
-                </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="flow">
-                  <span class="sidebar-nav-icon">↗</span>
-                  <span class="sidebar-nav-copy">
-                    <strong>Core flow</strong>
-                    <small>Five guided production steps</small>
-                  </span>
-                </button>
-                <button type="button" class="sidebar-nav-item" data-sidebar-target="clients">
-                  <span class="sidebar-nav-icon">◌</span>
-                  <span class="sidebar-nav-copy">
-                    <strong>Clients</strong>
-                    <small>Active workspaces and handoff state</small>
-                  </span>
-                </button>
-              </section>
-
-              <section class="sidebar-group">
-                <span class="sidebar-group-label">Tools</span>
-                <button type="button" class="sidebar-nav-item" id="new-client-sidebar-button" data-sidebar-target="new-client">
-                  <span class="sidebar-nav-icon">＋</span>
-                  <span class="sidebar-nav-copy">
-                    <strong>New client</strong>
-                    <small>Create a new guided setup</small>
-                  </span>
-                </button>
-                <button type="button" class="sidebar-nav-item" id="advanced-sidebar-button" data-sidebar-target="advanced">
-                  <span class="sidebar-nav-icon">⌘</span>
-                  <span class="sidebar-nav-copy">
-                    <strong>Advanced</strong>
-                    <small>Settings, jobs and reporting</small>
-                  </span>
-                </button>
-              </section>
-            </nav>
-
-            <article class="panel simple-panel workflow-rail-panel" data-guide="core-flow">
-              <div class="panel-head">
-                <div>
-                  <h2>Pääflow</h2>
-                  <p id="flow-rail-caption">Yksi aktiivinen askel kerrallaan.</p>
-                </div>
-              </div>
-              <div id="flow-rail-list" class="rail-flow-list"></div>
-            </article>
-
-            <article class="panel simple-panel clients-panel" data-guide="clients">
-              <div class="panel-head clients-head">
-                <div>
-                  <h2>Asiakkaat</h2>
-                  <p>Valitse yksi ja jatka flow'ta.</p>
-                </div>
-                <p id="clients-caption">0 asiakasta</p>
-              </div>
-              <div id="clients-list" class="client-selector"></div>
-            </article>
-
-            <article class="sidebar-upgrade-card">
-              <span class="sidebar-group-label">Lumix note</span>
-              <strong>Keep one client active at a time.</strong>
-              <p>Focused flow keeps strategy, assets and publish state aligned without dashboard noise.</p>
-              <button id="new-client-trigger" class="ghost-button rail-new-client-button" type="button" data-guide="new-client">
-                + New client
-              </button>
-            </article>
-
-            <div class="sidebar-user-row">
-              <button type="button" id="profile-menu-button" class="sidebar-user-button">
-                <span class="sidebar-user-avatar" id="sidebar-user-avatar">LU</span>
-                <span class="sidebar-user-copy">
-                  <strong id="sidebar-user-name">Lumix User</strong>
-                  <small id="sidebar-user-role">Workspace owner</small>
-                </span>
-                <span class="workspace-switcher-caret">▾</span>
-              </button>
-            </div>
-
-            <div id="workspace-switcher-popover" class="dashboard-popover dashboard-popover-workspace" aria-hidden="true">
-              <div class="dashboard-popover-head">
-                <span class="sidebar-group-label">Workspace</span>
-                <strong id="workspace-popover-title">Lumix Workspace</strong>
-              </div>
-              <div class="dashboard-popover-list">
-                <button type="button" class="dashboard-popover-item is-active">
-                  <span class="dashboard-popover-item-mark">L</span>
-                  <span>
-                    <strong id="workspace-popover-name">Lumix Workspace</strong>
-                    <small id="workspace-popover-meta">Primary production space</small>
-                  </span>
-                </button>
-                <button type="button" class="dashboard-popover-item dashboard-popover-item-muted" data-open-drawer="advanced">
-                  <span class="dashboard-popover-item-mark">⌘</span>
-                  <span>
-                    <strong>Open advanced</strong>
-                    <small>Settings, queue and reporting</small>
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div id="profile-settings-popover" class="dashboard-popover dashboard-popover-profile" aria-hidden="true">
-              <div class="dashboard-popover-head">
-                <span class="sidebar-group-label">Profile</span>
-                <strong id="profile-popover-name">Lumix User</strong>
-              </div>
-              <div class="dashboard-popover-list">
-                <button type="button" class="dashboard-popover-item" id="lumix-button">
-                  <span class="dashboard-popover-item-mark">✦</span>
-                  <span>
-                    <strong>Avaa Lumix</strong>
-                    <small>Bring up the Lumix companion</small>
-                  </span>
-                </button>
-                <button type="button" class="dashboard-popover-item" id="advanced-toggle" data-guide="advanced">
-                  <span class="dashboard-popover-item-mark">⌘</span>
-                  <span>
-                    <strong>Advanced settings</strong>
-                    <small>Inspect jobs, reports and team</small>
-                  </span>
-                </button>
-                <button type="button" class="dashboard-popover-item dashboard-popover-item-muted" id="logout-button">
-                  <span class="dashboard-popover-item-mark">⤴</span>
-                  <span>
-                    <strong>Kirjaudu ulos</strong>
-                    <small>End this current session</small>
-                  </span>
-                </button>
-              </div>
-            </div>
+            <button id="guided-logout" class="guided-topbar-link" type="button">Log out</button>
           </div>
-        </aside>
+        </header>
 
-        <section class="workflow-shell" data-guide="workflow">
-          <section class="dashboard-topbar">
-            <div>
-              <p class="eyebrow">Lumix</p>
-              <h1 id="agency-title">Työtila</h1>
-            </div>
-            <div class="toolbar-actions">
-              <button class="ghost-button topbar-action-button" type="button" data-open-drawer="new-client">New client</button>
-              <button class="ghost-button topbar-action-button" type="button" data-open-drawer="advanced">Advanced</button>
-            </div>
-          </section>
+        <p id="guided-status" class="guided-status" aria-live="polite"></p>
 
-          <div class="workflow-content-shell">
-            <div id="active-client-view"></div>
-          </div>
-        </section>
+        <section id="guided-main" class="guided-main" aria-live="polite"></section>
       </section>
     </main>
-
-    <aside id="new-client-drawer" class="dashboard-drawer" aria-hidden="true">
-      <div class="dashboard-drawer-scrim" data-close-drawer="new-client"></div>
-      <section class="dashboard-drawer-panel">
-        <div class="dashboard-drawer-head">
-          <div>
-            <p class="eyebrow">New client</p>
-            <h2>Lisää asiakas</h2>
-            <p>Yksi lyhyt business-kuvaus riittää alkuun.</p>
-          </div>
-          <button class="ghost-button dashboard-drawer-close" type="button" data-close-drawer="new-client">Sulje</button>
-        </div>
-
-        <form id="client-form" class="magic-onboarding-form">
-          <article class="magic-onboarding-card">
-            <textarea
-              name="businessBrief"
-              rows="5"
-              class="magic-onboarding-input"
-              aria-label="Kuvaa yritys lyhyesti"
-              placeholder="Autamme hotellien ja luksuskotien sauna-projekteissa Suomessa."
-              required
-            ></textarea>
-
-            <button type="submit">Luo asiakas</button>
-          </article>
-        </form>
-      </section>
-    </aside>
-
-    <aside id="advanced-drawer" class="dashboard-drawer" aria-hidden="true">
-      <div class="dashboard-drawer-scrim" data-close-drawer="advanced"></div>
-      <section class="dashboard-drawer-panel dashboard-drawer-panel-wide">
-        <div class="dashboard-drawer-head">
-          <div>
-            <p class="eyebrow">Advanced</p>
-            <h2>Workspace and client settings</h2>
-            <p>Harvemmin tarvittavat asetukset ja inspect-näkymät ovat täällä erillään pääflow’sta.</p>
-          </div>
-          <button class="ghost-button dashboard-drawer-close" type="button" data-close-drawer="advanced">Sulje</button>
-        </div>
-
-        <div class="dashboard-drawer-body">
-          <section class="panel details-panel">
-            <div class="panel-head">
-              <div>
-                <h2>Workspace settings</h2>
-                <p>Työjono, raportit, tiimi ja Lumix-tausta.</p>
-              </div>
-            </div>
-
-            <section class="ops-grid">
-              <article class="panel simple-panel simple-panel-nested">
-                <div class="panel-head">
-                  <h2>Työjono</h2>
-                  <p>Näet täällä taustalla ajettavat työt.</p>
-                </div>
-                <div class="quick-actions">
-                  <button id="worker-button" class="ghost-button" type="button">Aja jono</button>
-                  <button id="scheduler-button" class="ghost-button" type="button">Aja ajastus</button>
-                  <button id="send-report-button" class="ghost-button" type="button">Lähetä raportti</button>
-                </div>
-                <div class="chip-row chip-row-soft">
-                  <span class="chip" id="ai-chip">AI: tarkistetaan...</span>
-                  <span class="chip" id="stripe-chip">Stripe: tarkistetaan...</span>
-                  <span class="chip" id="scheduler-chip">Ajastus: tarkistetaan...</span>
-                </div>
-                <section id="summary-grid" class="summary-grid"></section>
-                <div id="jobs-list" class="mini-list"></div>
-              </article>
-
-              <article class="panel simple-panel simple-panel-nested lumix-panel">
-                <div class="panel-head">
-                  <h2>Lumix taustalla</h2>
-                  <p id="lumix-summary">Näet täältä miten Lumix auttaa.</p>
-                </div>
-                <div id="lumix-codex" class="mini-list"></div>
-              </article>
-            </section>
-
-            <section class="workspace-grid workspace-grid-top">
-              <article class="panel simple-panel simple-panel-nested">
-                <div class="panel-head">
-                  <h2>Tiimi</h2>
-                  <p>Lisää tarvittaessa muita käyttäjiä samaan tilaan.</p>
-                </div>
-                <form id="team-form" class="stack-form">
-                  <label>
-                    <span>Email</span>
-                    <input name="email" type="email" placeholder="member@example.com" required />
-                  </label>
-                  <label>
-                    <span>Password</span>
-                    <input name="password" type="password" placeholder="Temporary password" required />
-                  </label>
-                  <label>
-                    <span>Role</span>
-                    <select name="role">
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </label>
-                  <button type="submit">Lisää jäsen</button>
-                </form>
-                <div id="team-list" class="mini-list"></div>
-              </article>
-
-              <article class="panel simple-panel simple-panel-nested">
-                <div class="panel-head">
-                  <h2>Sähköpostiraportit</h2>
-                  <p>Tallenna raporttien lähetysasetukset.</p>
-                </div>
-                <form id="report-form" class="stack-form">
-                  <div class="inline-grid">
-                    <label>
-                      <span>SMTP host</span>
-                      <input name="smtpHost" placeholder="smtp.resend.com" />
-                    </label>
-                    <label>
-                      <span>SMTP port</span>
-                      <input name="smtpPort" placeholder="587" />
-                    </label>
-                  </div>
-                  <div class="inline-grid">
-                    <label>
-                      <span>SMTP user</span>
-                      <input name="smtpUser" placeholder="resend" />
-                    </label>
-                    <label>
-                      <span>SMTP password</span>
-                      <input name="smtpPass" type="password" placeholder="SMTP password" />
-                    </label>
-                  </div>
-                  <div class="inline-grid">
-                    <label>
-                      <span>From email</span>
-                      <input name="fromEmail" placeholder="reports@agency.com" />
-                    </label>
-                    <label class="checkbox-row checkbox-row-inline">
-                      <input name="smtpSecure" type="checkbox" />
-                      <span>Use secure SMTP</span>
-                    </label>
-                  </div>
-                  <label>
-                    <span>Recipients</span>
-                    <input name="recipients" placeholder="founder@agency.com, ops@agency.com" />
-                  </label>
-                  <button type="submit">Tallenna</button>
-                </form>
-                <div id="report-history" class="mini-list"></div>
-              </article>
-            </section>
-          </section>
-
-          <section id="client-advanced-view"></section>
-        </div>
-      </section>
-    </aside>
-
-    <aside id="lumix-coach" class="lumix-coach"></aside>
-    <div id="status-banner" class="status-banner">Ladataan...</div>
 
     <script type="module" src="/dashboard.js"></script>
   </body>

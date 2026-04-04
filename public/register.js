@@ -2,6 +2,11 @@ import { clearAuthenticated, markAuthenticated, redirectTo } from "./auth-state.
 
 const statusBanner = document.getElementById("status-banner");
 
+function getPostAuthPath(bootstrap) {
+  const needsOnboarding = !bootstrap.user?.onboardingCompletedAt && !(bootstrap.clients || []).length;
+  return needsOnboarding ? "/welcome" : "/dashboard";
+}
+
 function setStatus(message) {
   statusBanner.textContent = message;
 }
@@ -44,7 +49,7 @@ async function refresh() {
 
   if (bootstrap.authenticated) {
     markAuthenticated();
-    redirectTo("/dashboard");
+    redirectTo(getPostAuthPath(bootstrap));
     return;
   }
 
@@ -61,9 +66,10 @@ document.getElementById("register-form").addEventListener("submit", async (event
       method: "POST",
       body: JSON.stringify(readForm(form))
     });
+    const bootstrap = await api("/api/bootstrap");
     markAuthenticated();
     form.reset();
-    redirectTo("/dashboard");
+    redirectTo(getPostAuthPath(bootstrap));
   });
 });
 

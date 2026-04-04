@@ -37,6 +37,7 @@ function sanitizeUser(user) {
     role: user.role,
     agencyId: user.agencyId,
     agencyName: user.agencyName,
+    onboardingCompletedAt: user.onboardingCompletedAt || null,
     createdAt: user.createdAt
   };
 }

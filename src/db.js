@@ -51,6 +51,7 @@ function mapUser(row) {
         role: row.role,
         agencyId: row.agency_id,
         agencyName: row.agency_name_joined || row.agency_name,
+        onboardingCompletedAt: row.onboarding_completed_at || null,
         createdAt: row.created_at
       }
     : null;
@@ -662,6 +663,9 @@ export function createDatabase() {
 
   if (!columnExists("users", "agency_id")) db.exec("ALTER TABLE users ADD COLUMN agency_id INTEGER");
   if (!columnExists("users", "role")) db.exec("ALTER TABLE users ADD COLUMN role TEXT");
+  if (!columnExists("users", "onboarding_completed_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN onboarding_completed_at TEXT");
+  }
   if (!columnExists("clients", "agency_id")) db.exec("ALTER TABLE clients ADD COLUMN agency_id INTEGER");
   if (!columnExists("clients", "custom_prompt")) db.exec("ALTER TABLE clients ADD COLUMN custom_prompt TEXT");
   if (!columnExists("strategy_recommendations", "status")) {
@@ -862,6 +866,12 @@ export function createDatabase() {
 
   function updateAgencyMemberRole(agencyId, userId, role) {
     run(`UPDATE users SET role = ? WHERE id = ? AND agency_id = ?`, role, userId, agencyId);
+    return findUserById(userId);
+  }
+
+  function markUserOnboardingComplete(userId) {
+    const stamp = nowIso();
+    run(`UPDATE users SET onboarding_completed_at = ? WHERE id = ?`, stamp, userId);
     return findUserById(userId);
   }
 
@@ -2048,6 +2058,7 @@ export function createDatabase() {
     getUserRecordByEmail,
     findUserByEmail,
     findUserById,
+    markUserOnboardingComplete,
     listAgencyMembers,
     updateAgencyMemberRole,
     createSession,

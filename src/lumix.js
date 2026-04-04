@@ -1062,6 +1062,12 @@ export function buildLumixContext(client) {
     lines.push(`- Geo focus: ${client.businessProfile.geoFocus || "Ei määritelty"}`);
     lines.push(`- Price position: ${getOptionLabel("pricePosition", client.businessProfile.pricePosition)}`);
     lines.push(`- Main CTA: ${client.businessProfile.mainCta || "Ei määritelty"}`);
+    if (client.businessProfile.rawNotes?.privacyLabel) {
+      lines.push(`- Privacy feel: ${client.businessProfile.rawNotes.privacyLabel}`);
+    }
+    if (client.businessProfile.rawNotes?.visualLabel) {
+      lines.push(`- Visual direction: ${client.businessProfile.rawNotes.visualLabel}`);
+    }
     if (client.businessProfile.rawNotes?.notes) {
       lines.push(`- Notes: ${client.businessProfile.rawNotes.notes}`);
     }

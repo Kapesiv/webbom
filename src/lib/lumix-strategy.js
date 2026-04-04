@@ -118,14 +118,27 @@ function buildStrategyPrompt(client, suggestedRecommendation) {
 }
 
 function buildDemoStrategy(recommendation) {
+  return buildSavedStrategy(recommendation, {}, {
+    mode: "demo",
+    notice: "OPENAI_API_KEY puuttuu. Strategy generoitiin demo-tilassa."
+  });
+}
+
+function buildSavedStrategy(recommendation, overrides = {}, source = null) {
   return validateStrategy({
     ...recommendation,
+    ...overrides,
+    contentAngles:
+      Array.isArray(overrides.contentAngles) && overrides.contentAngles.length
+        ? overrides.contentAngles
+        : recommendation.contentAngles,
+    homepageStructure:
+      Array.isArray(overrides.homepageStructure) && overrides.homepageStructure.length
+        ? overrides.homepageStructure
+        : recommendation.homepageStructure,
     version: "v1",
     status: "approved",
-    source: {
-      mode: "demo",
-      notice: "OPENAI_API_KEY puuttuu. Strategy generoitiin demo-tilassa."
-    }
+    source
   });
 }
 
@@ -217,23 +230,26 @@ export async function generateAndSaveStrategy(database, clientId) {
   } else {
     const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
     const prompt = buildStrategyPrompt(client, actionResult.recommendation);
-    const parsed = await requestStructuredJson(openai, {
-      isOpenRouter,
-      model,
-      prompt,
-      schemaName: "lumix_strategy",
-      schema: strategySchema,
-      maxTokens: 400
-    });
-    strategy = validateStrategy({
-      ...parsed,
-      version: "v1",
-      status: "approved",
-      source: {
+    try {
+      const parsed = await requestStructuredJson(openai, {
+        isOpenRouter,
+        model,
+        prompt,
+        schemaName: "lumix_strategy",
+        schema: strategySchema,
+        maxTokens: 400
+      });
+      strategy = buildSavedStrategy(actionResult.recommendation, parsed, {
         mode: "live",
         model
-      }
-    });
+      });
+    } catch {
+      strategy = buildSavedStrategy(actionResult.recommendation, {}, {
+        mode: "fallback",
+        model,
+        notice: "Live strategy response was incomplete. Recommendation fallback used."
+      });
+    }
   }
 
   database.saveClientStrategy(clientId, strategy);

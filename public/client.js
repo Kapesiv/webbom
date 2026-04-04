@@ -1,10 +1,148 @@
 const clientId = Number(window.location.pathname.split("/").pop());
 const sessionStorageKey = `autonomous-client-session-${clientId}`;
 let sessionId = window.localStorage.getItem(sessionStorageKey);
+const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+let revealObserver = null;
+let scrollShiftNodes = [];
+let scrollMotionBound = false;
 
 if (!sessionId) {
   sessionId = crypto.randomUUID();
   window.localStorage.setItem(sessionStorageKey, sessionId);
+}
+
+function getRevealObserver() {
+  if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+    return null;
+  }
+
+  if (!revealObserver) {
+    revealObserver = new IntersectionObserver(
+      (entries, observer) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        });
+      },
+      {
+        threshold: 0.16,
+        rootMargin: "0px 0px -10% 0px"
+      }
+    );
+  }
+
+  return revealObserver;
+}
+
+function observeReveal(node) {
+  if (!(node instanceof HTMLElement)) return;
+
+  const observer = getRevealObserver();
+  if (!observer) {
+    node.classList.add("is-visible");
+    return;
+  }
+
+  observer.observe(node);
+}
+
+function updateScrollShift() {
+  if (prefersReducedMotion || !scrollShiftNodes.length) {
+    return;
+  }
+
+  const viewportHeight = window.innerHeight || 1;
+
+  scrollShiftNodes.forEach(({ node, amount }) => {
+    const rect = node.getBoundingClientRect();
+    const distance = rect.top + rect.height / 2 - viewportHeight * 0.58;
+    const progress = Math.max(-1, Math.min(1, distance / viewportHeight));
+    node.style.setProperty("--scroll-shift", `${Math.round(progress * amount * -1)}px`);
+  });
+}
+
+function bindScrollMotion() {
+  if (prefersReducedMotion || scrollMotionBound) {
+    return;
+  }
+
+  let ticking = false;
+
+  const queueUpdate = () => {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(() => {
+      updateScrollShift();
+      ticking = false;
+    });
+  };
+
+  window.addEventListener("scroll", queueUpdate, { passive: true });
+  window.addEventListener("resize", queueUpdate);
+  scrollMotionBound = true;
+}
+
+function setupPublicMotion() {
+  const head = document.querySelector(".public-dashboard-head");
+  if (head) {
+    head.dataset.reveal = head.dataset.reveal || "soft";
+    observeReveal(head);
+  }
+
+  const staticGroups = [
+    [".public-nav-card", "panel", 0, 70],
+    [".public-seo-card", "panel", 80, 70],
+    [".public-preview-panel", "panel", 120, 70],
+    [".public-contact-card", "panel", 160, 70],
+    [".public-note-card", "panel", 220, 70]
+  ];
+
+  staticGroups.forEach(([selector, type, delay]) => {
+    document.querySelectorAll(selector).forEach((node, index) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.dataset.reveal = node.dataset.reveal || type;
+      node.style.setProperty("--reveal-delay", `${Number(delay) + index * 70}ms`);
+      observeReveal(node);
+    });
+  });
+
+  const staggerGroups = [
+    [".public-metric-card", "panel", 120, 70],
+    [".public-nav-item", "panel", 160, 60],
+    [".mini-card", "soft", 180, 60],
+    [".public-hero-side-card", "soft", 220, 70],
+    [".generated-site > section", "soft", 180, 90]
+  ];
+
+  staggerGroups.forEach(([selector, type, baseDelay, step]) => {
+    document.querySelectorAll(selector).forEach((node, index) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.dataset.reveal = node.dataset.reveal || type;
+      node.style.setProperty("--reveal-delay", `${Number(baseDelay) + index * Number(step)}ms`);
+      observeReveal(node);
+    });
+  });
+
+  scrollShiftNodes = [];
+
+  const motionTargets = [
+    [".public-preview-panel", 18],
+    [".public-contact-card", 8],
+    [".public-note-card", 8],
+    [".public-metric-card", 6]
+  ];
+
+  motionTargets.forEach(([selector, amount]) => {
+    document.querySelectorAll(selector).forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.dataset.scrollShift = String(amount);
+      scrollShiftNodes.push({ node, amount: Number(amount) });
+    });
+  });
+
+  bindScrollMotion();
+  updateScrollShift();
 }
 
 function setStatus(message) {
@@ -76,6 +214,17 @@ function getRenderedSections() {
 function decorateGeneratedSite(client) {
   const wrapper = ensureGeneratedSite();
   const sections = getRenderedSections();
+
+  sections.forEach((section, index) => {
+    section.dataset.reveal = section.dataset.reveal || "soft";
+    section.style.setProperty("--reveal-delay", `${180 + index * 90}ms`);
+  });
+
+  const hasDesignFamily = Array.from(wrapper.classList).some((className) => className.startsWith("generated-site-family-"));
+  if (hasDesignFamily) {
+    return;
+  }
+
   const sectionMeta = [
     { kicker: "Overview", kind: "hero" },
     { kicker: "Offer", kind: "offer" },
@@ -106,17 +255,17 @@ function decorateGeneratedSite(client) {
     const side = document.createElement("aside");
     side.className = "public-hero-side";
     side.innerHTML = `
-      <article class="public-hero-side-card">
+      <article class="public-hero-side-card" data-reveal="soft">
         <span>Primary CTA</span>
         <strong>${escapeHtml(client.website?.cta || "Ota yhteytta")}</strong>
         <p>CTA toistuu hero-alueella ja loppublokissa.</p>
       </article>
-      <article class="public-hero-side-card">
+      <article class="public-hero-side-card" data-reveal="soft">
         <span>SEO slug</span>
         <strong>${escapeHtml(client.seo?.slug ? `/${client.seo.slug}` : "/coming-soon")}</strong>
         <p>Osoite tulee suoraan asiakkaan omasta datasta.</p>
       </article>
-      <article class="public-hero-side-card">
+      <article class="public-hero-side-card" data-reveal="soft">
         <span>Keyword count</span>
         <strong>${escapeHtml(formatMetric(client.seo?.keywords?.length || 0))}</strong>
         <p>${escapeHtml(client.seo?.keywords?.slice(0, 2).join(" • ") || "No keywords yet")}</p>
@@ -173,8 +322,8 @@ function renderMetricGrid(client) {
 
   document.getElementById("public-metrics").innerHTML = cards
     .map(
-      (card) => `
-        <article class="public-metric-card">
+      (card, index) => `
+        <article class="public-metric-card" data-reveal="panel" style="--reveal-delay:${120 + index * 70}ms">
           <div class="public-metric-head">
             <span>${escapeHtml(card.label)}</span>
             <small>Live</small>
@@ -197,7 +346,7 @@ function renderPageMap() {
           const label = heading?.textContent?.trim() || `Section ${index + 1}`;
           const badge = index === 0 ? "Hero" : `${index + 1}`;
           return `
-            <article class="public-nav-item">
+            <article class="public-nav-item" data-reveal="panel" style="--reveal-delay:${160 + index * 60}ms">
               <span class="public-nav-index">${escapeHtml(badge)}</span>
               <div>
                 <strong>${escapeHtml(label)}</strong>
@@ -208,7 +357,7 @@ function renderPageMap() {
         })
         .join("")
     : `
-        <article class="mini-card">
+        <article class="mini-card" data-reveal="soft">
           <strong>Ei rakennetta vielä</strong>
           <p>Generoi landing page, niin section map ilmestyy tähän.</p>
         </article>
@@ -233,8 +382,8 @@ function renderSeoSummary(client) {
 
   document.getElementById("public-seo-summary").innerHTML = items
     .map(
-      (item) => `
-        <article class="mini-card">
+      (item, index) => `
+        <article class="mini-card" data-reveal="soft" style="--reveal-delay:${180 + index * 60}ms">
           <strong>${escapeHtml(item.title)}</strong>
           <p>${escapeHtml(item.text)}</p>
         </article>
@@ -261,8 +410,8 @@ function renderInsights(client) {
 
   document.getElementById("public-insights").innerHTML = cards
     .map(
-      (card) => `
-        <article class="mini-card">
+      (card, index) => `
+        <article class="mini-card" data-reveal="soft" style="--reveal-delay:${200 + index * 60}ms">
           <strong>${escapeHtml(card.title)}</strong>
           <p>${escapeHtml(card.text)}</p>
         </article>
@@ -326,6 +475,7 @@ if (!bootstrap.client) {
   renderPageMap();
   renderSeoSummary(bootstrap.client);
   renderInsights(bootstrap.client);
+  setupPublicMotion();
 
   await postJson(`/api/public/clients/${clientId}/track`, {
     eventType: "page_view",
