@@ -1,8 +1,8 @@
 const lumixProfile = {
-  name: "Lumix",
+  name: "Lumi",
   role: "Ontology-driven growth agent",
   summary:
-    "Lumix auttaa muuttamaan epäselvän briefin rakenteiseksi strategiaksi, sisällöksi ja julkaistavaksi markkinointipaketiksi."
+    "Lumi auttaa muuttamaan epäselvän briefin rakenteiseksi strategiaksi, sisällöksi ja julkaistavaksi markkinointipaketiksi."
 };
 
 const lumixOntologyModel = {
@@ -395,9 +395,9 @@ export function getLumixAgent() {
 
 export function getLumixHumanCodex() {
   return {
-    title: "Lumix mini-codex",
+    title: "Lumi mini-codex",
     intro:
-      "Lumix auttaa silloin, kun asiakas tietää mitä myy mutta ei vielä tiedä miten se pitäisi paketoida sivuksi, strategiaksi, sisällöksi ja CTA-poluksi.",
+      "Lumi auttaa silloin, kun asiakas tietää mitä myy mutta ei vielä tiedä miten se pitäisi paketoida sivuksi, strategiaksi, sisällöksi ja CTA-poluksi.",
     steps: [
       "1. Tunnista yritystyyppi: mikä yritys on ja missä markkinassa se toimii.",
       "2. Tunnista tavoite: halutaanko liidejä, varauksia, myyntiä vai tunnettuutta.",
@@ -669,7 +669,7 @@ function evaluateRecommendEligibility({ objects, links }) {
 
   const ready = missingObjects.length === 0;
   const reason = ready
-    ? "Lumixilla on riittävä intake-data strategian muodostamiseen."
+    ? "Lumilla on riittävä intake-data strategian muodostamiseen."
     : `Täydennä ensin: ${missingObjects.join(", ")}.`;
 
   return {
@@ -912,7 +912,7 @@ export function runLumixAction(actionId, input) {
   const handler = lumixActionHandlers[actionId];
 
   if (!handler) {
-    throw new Error(`Unknown Lumix action: ${actionId}`);
+    throw new Error(`Unknown Lumi action: ${actionId}`);
   }
 
   return {
@@ -929,7 +929,7 @@ function getNextLumixStep(runtime) {
   if (actions.recommend_strategy.ready && !runtime.states.strategy.exists) {
     return {
       title: "Tee tämä seuraavaksi",
-      text: "Pyydä Lumixilta ehdotus. Intake-objektit ovat valmiit.",
+      text: "Pyydä Lumilta ehdotus. Intake-objektit ovat valmiit.",
       target: "[data-guide='recommend']",
       actionId: "recommend_strategy"
     };
@@ -1048,7 +1048,7 @@ export function buildLumixRuntime(client) {
 
 export function buildLumixContext(client) {
   const lines = [
-    `${lumixProfile.name} is the ontology-driven strategy agent inside the Lumix app.`,
+    `${lumixProfile.name} is the ontology-driven strategy agent inside the EasyOnlinePresence app.`,
     `${lumixProfile.name} should reason from the structured ontology before generating content.`
   ];
 
@@ -1062,13 +1062,19 @@ export function buildLumixContext(client) {
     lines.push(`- Geo focus: ${client.businessProfile.geoFocus || "Ei määritelty"}`);
     lines.push(`- Price position: ${getOptionLabel("pricePosition", client.businessProfile.pricePosition)}`);
     lines.push(`- Main CTA: ${client.businessProfile.mainCta || "Ei määritelty"}`);
+    if (client.businessProfile.rawNotes?.privacyLabel) {
+      lines.push(`- Privacy feel: ${client.businessProfile.rawNotes.privacyLabel}`);
+    }
+    if (client.businessProfile.rawNotes?.visualLabel) {
+      lines.push(`- Visual direction: ${client.businessProfile.rawNotes.visualLabel}`);
+    }
     if (client.businessProfile.rawNotes?.notes) {
       lines.push(`- Notes: ${client.businessProfile.rawNotes.notes}`);
     }
   }
 
   if (client.strategyRecommendation) {
-    lines.push("Approved Lumix strategy:");
+    lines.push("Approved Lumi strategy:");
     lines.push(`- Positioning: ${client.strategyRecommendation.positioning || "unknown"}`);
     lines.push(`- Primary offer: ${client.strategyRecommendation.primaryOffer || "unknown"}`);
     lines.push(`- Primary audience: ${client.strategyRecommendation.primaryAudience || "unknown"}`);
@@ -1099,7 +1105,7 @@ export function buildLumixStrategyRecommendation(client, businessProfile, intake
 
 export function buildLumixPromptHeader() {
   return [
-    `You are ${lumixProfile.name}, the ontology-driven growth agent inside the Lumix app.`,
+    `You are ${lumixProfile.name}, the ontology-driven growth agent inside the EasyOnlinePresence app.`,
     "Your job is to turn a loose business brief into a clear, conversion-focused content package.",
     "Prefer strategic clarity, strong CTA logic, and concrete audience-language over generic marketing filler."
   ].join("\n");

@@ -1,65 +1,152 @@
+import { clearAuthenticated, hasStoredAuth, redirectTo } from "./auth-state.js";
+
+const WORKFLOW_STORAGE_KEY = "lumix-guided-workflow-v1";
+const GENERATE_MESSAGES = [
+  "Analyzing brief...",
+  "Building strategy...",
+  "Generating page...",
+  "Writing blog drafts...",
+  "Optimizing SEO..."
+];
+const STEP_ORDER = ["client", "strategy", "generate", "preview", "publish"];
+const STEP_LABELS = {
+  client: "Client",
+  strategy: "Strategy",
+  generate: "Generate",
+  preview: "Preview",
+  publish: "Publish"
+};
+
 const state = {
   bootstrap: null,
   activeClientId: null,
-  tourActive: false,
-  tourStepIndex: 0,
-  tourInitialized: false,
-  lumixHidden: false
+  storage: readStorage(),
+  loadingGenerate: null,
+  loadingTimer: null
 };
 
-const summaryGrid = document.getElementById("summary-grid");
-const clientsList = document.getElementById("clients-list");
-const clientsCaption = document.getElementById("clients-caption");
-const agencyTitle = document.getElementById("agency-title");
-const agencySubtitle = document.getElementById("agency-subtitle");
-const statusBanner = document.getElementById("status-banner");
-const teamList = document.getElementById("team-list");
-const reportHistory = document.getElementById("report-history");
-const jobsList = document.getElementById("jobs-list");
-const lumixCodex = document.getElementById("lumix-codex");
-const lumixSummary = document.getElementById("lumix-summary");
-const activeClientView = document.getElementById("active-client-view");
-const lumixCoach = document.getElementById("lumix-coach");
-const lumixButton = document.getElementById("lumix-button");
-const activeClientSelect = document.getElementById("active-client-select");
-const primaryGenerateButton = document.getElementById("primary-generate-button");
-const lumixActionState = new Map();
-const lumixAssistState = new Map();
-const previewTabState = new Map();
-let guideHighlightTimeout = null;
-const lumixTourStorageKey = "lumix-tour-dismissed-v1";
-const lumixHiddenStorageKey = "lumix-hidden-v1";
+const stepList = document.getElementById("guided-step-list");
+const mainView = document.getElementById("guided-main");
+const statusBanner = document.getElementById("guided-status");
+const clientSwitcher = document.getElementById("guided-client-switcher");
+const workspaceName = document.getElementById("guided-workspace-name");
+const logoutButton = document.getElementById("guided-logout");
+const newWebsiteButton = document.getElementById("guided-new-website");
 
-function getIntakeCatalog() {
-  return (
-    state.bootstrap?.lumix?.catalog || {
-      businessType: [],
-      offerType: [],
-      audienceType: [],
-      goalType: [],
-      toneType: [],
-      pricePosition: []
-    }
+if (!hasStoredAuth()) {
+  redirectTo("/login");
+}
+
+function readStorage() {
+  try {
+    const value = JSON.parse(localStorage.getItem(WORKFLOW_STORAGE_KEY) || "{}");
+    return {
+      activeClientId: value.activeClientId ?? null,
+      draftBrief: String(value.draftBrief || ""),
+      clients: value.clients && typeof value.clients === "object" ? value.clients : {}
+    };
+  } catch {
+    return {
+      activeClientId: null,
+      draftBrief: "",
+      clients: {}
+    };
+  }
+}
+
+function writeStorage() {
+  localStorage.setItem(
+    WORKFLOW_STORAGE_KEY,
+    JSON.stringify({
+      activeClientId: state.storage.activeClientId,
+      draftBrief: state.storage.draftBrief,
+      clients: state.storage.clients
+    })
   );
 }
 
-function setStatus(message) {
-  statusBanner.textContent = message || "";
-  statusBanner.classList.toggle("is-visible", Boolean(message));
+function getStorageKey(clientId) {
+  return clientId ? String(clientId) : "draft";
 }
 
-function getErrorMessage(error) {
-  return error instanceof Error ? error.message : "Request failed";
+function createDefaultClientUiState() {
+  return {
+    activeStep: "client",
+    businessBrief: "",
+    strategyDraft: null,
+    strategyAccepted: false,
+    strategyEditing: false,
+    previewTab: "landing",
+    generationComplete: false,
+    previewApproved: false,
+    publishReady: false,
+    publishFormOpen: false,
+    publishDraft: {
+      platform: "wordpress",
+      name: "Primary site",
+      baseUrl: "",
+      username: "",
+      applicationPassword: "",
+      siteUrl: "",
+      token: "",
+      collectionId: ""
+    },
+    published: false,
+    publishedUrl: ""
+  };
 }
 
-async function runAction(pendingMessage, action) {
-  setStatus(pendingMessage);
-
-  try {
-    await action();
-  } catch (error) {
-    setStatus(getErrorMessage(error));
+function getClientUiState(clientId) {
+  const key = getStorageKey(clientId);
+  if (!state.storage.clients[key]) {
+    state.storage.clients[key] = createDefaultClientUiState();
   }
+  return state.storage.clients[key];
+}
+
+function updateClientUiState(clientId, updates) {
+  const key = getStorageKey(clientId);
+  const current = getClientUiState(clientId);
+  state.storage.clients[key] = {
+    ...current,
+    ...updates,
+    publishDraft: {
+      ...current.publishDraft,
+      ...(updates.publishDraft || {})
+    }
+  };
+  writeStorage();
+}
+
+function setStatus(message = "", tone = "") {
+  statusBanner.textContent = message;
+  statusBanner.className = `guided-status${message ? " is-visible" : ""}${tone ? ` is-${tone}` : ""}`;
+}
+
+function getFriendlyErrorMessage(error, fallbackMessage) {
+  const message = error instanceof Error ? String(error.message || "").trim() : "";
+
+  if (/Strategy requires/i.test(message) || /Strategy generation is not allowed yet/i.test(message)) {
+    return "Lumix could not build a complete strategy yet. Add a slightly clearer business description and continue again.";
+  }
+
+  if (/Recommendation is not allowed yet/i.test(message)) {
+    return "Lumix needs a clearer business brief before it can create your strategy.";
+  }
+
+  if (/Generate is not allowed yet/i.test(message)) {
+    return "Approve the strategy first, then generate the content pack.";
+  }
+
+  if (/Expected ',' or ']'/i.test(message) || /JSON at position/i.test(message) || /Unexpected token/i.test(message)) {
+    return "Lumix hit a formatting issue while generating the content pack. Please run generation again.";
+  }
+
+  if (/Publish is not allowed yet/i.test(message)) {
+    return "Approve the preview and connect a publish channel before publishing.";
+  }
+
+  return message || fallbackMessage;
 }
 
 function escapeHtml(value) {
@@ -69,11 +156,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function formatDate(isoString) {
-  if (!isoString) return "Ei vielä";
-  return new Date(isoString).toLocaleString();
 }
 
 async function api(path, options = {}) {
@@ -90,1008 +172,627 @@ async function api(path, options = {}) {
   return data;
 }
 
-function readForm(formElement) {
-  return Object.fromEntries(new FormData(formElement).entries());
+async function refreshBootstrap() {
+  const bootstrap = await api("/api/bootstrap");
+  if (!bootstrap.authenticated) {
+    clearAuthenticated();
+    redirectTo("/login");
+    return null;
+  }
+
+  state.bootstrap = bootstrap;
+  syncActiveClientId();
+  return bootstrap;
 }
 
-function buildPublishConfig(raw) {
-  const entries = Object.entries({
-    baseUrl: String(raw.baseUrl || "").trim(),
-    username: String(raw.username || "").trim(),
-    applicationPassword: String(raw.applicationPassword || "").trim(),
-    status: String(raw.status || "").trim(),
-    apiToken: String(raw.apiToken || "").trim(),
-    siteId: String(raw.siteId || "").trim(),
-    collectionId: String(raw.collectionId || "").trim()
-  }).filter(([, value]) => value);
-
-  return Object.fromEntries(entries);
-}
-
-function formatClientCount(count) {
-  return `${count} ${count === 1 ? "asiakas" : "asiakasta"}`;
+function getClients() {
+  return state.bootstrap?.clients || [];
 }
 
 function getActiveClient() {
-  return state.bootstrap?.clients?.find((client) => client.id === state.activeClientId) || null;
+  return getClients().find((client) => client.id === state.activeClientId) || null;
 }
 
-function syncActiveClientId(clients) {
-  if (!clients.length) {
-    state.activeClientId = null;
+function syncActiveClientId() {
+  const clients = getClients();
+  const storedId = Number(state.storage.activeClientId || 0) || null;
+  const urlClientId = Number(new URLSearchParams(window.location.search).get("client") || 0) || null;
+
+  if (urlClientId && clients.some((client) => client.id === urlClientId)) {
+    state.activeClientId = urlClientId;
+    state.storage.activeClientId = urlClientId;
+    writeStorage();
     return;
   }
 
-  const exists = clients.some((client) => client.id === state.activeClientId);
-  if (!exists) {
-    state.activeClientId = clients[0].id;
-  }
-}
-
-function hasProfile(client) {
-  const profile = client.businessProfile || {};
-  return Boolean(
-    client.intakeAnswers?.length ||
-      profile.businessType ||
-      profile.offerType ||
-      profile.audienceType ||
-      profile.goalType ||
-      profile.toneType ||
-      profile.pricePosition ||
-      profile.geoFocus ||
-      profile.mainCta ||
-      profile.rawNotes?.notes
-  );
-}
-
-function hasContent(client) {
-  return Boolean(client.website?.html || client.blogs?.length || client.seo);
-}
-
-function getDefaultPreviewTab(client) {
-  if (client.website?.headline || client.website?.subheadline || client.website?.html) {
-    return "landing";
-  }
-
-  if (client.blogs?.length) {
-    return "blog-0";
-  }
-
-  return "seo";
-}
-
-function getPreviewTabs(client) {
-  const tabs = [{ id: "landing", label: "Landing" }];
-  ensureArray(client.blogs).forEach((_blog, index) => {
-    tabs.push({ id: `blog-${index}`, label: `Blog ${index + 1}` });
-  });
-  tabs.push({ id: "seo", label: "SEO" });
-  return tabs;
-}
-
-function getActivePreviewTab(client) {
-  const tabs = getPreviewTabs(client);
-  const savedTab = previewTabState.get(client.id);
-  if (tabs.some((tab) => tab.id === savedTab)) {
-    return savedTab;
-  }
-  return getDefaultPreviewTab(client);
-}
-
-function stripHtmlPreview(html, maxLength = 240) {
-  const text = String(html || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!text) return "";
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
-}
-
-function getLumixRuntime(client) {
-  return (
-    client?.lumix || {
-      objectSummary: {},
-      states: {
-        strategy: { exists: Boolean(client?.strategyRecommendation), status: client?.strategyRecommendation ? "approved" : "missing" },
-        contentPack: { exists: hasContent(client), status: hasContent(client) ? "generated" : "empty" }
-      },
-      actions: {
-        recommend_strategy: { ready: false, reason: "" },
-        generate_pack: { ready: false, reason: "" },
-        publish_pack: { ready: false, reason: "" },
-        review_leads: { ready: false, reason: "" }
-      },
-      nextStep: null
-    }
-  );
-}
-
-function openAncestorDetails(element) {
-  let current = element?.parentElement || null;
-
-  while (current) {
-    if (current.tagName === "DETAILS") {
-      current.open = true;
-    }
-    current = current.parentElement;
-  }
-}
-
-function clearGuideHighlights() {
-  document.querySelectorAll(".guide-highlight").forEach((element) => {
-    element.classList.remove("guide-highlight");
-  });
-}
-
-function highlightGuideTarget(selector) {
-  if (!selector) return;
-  const target = document.querySelector(selector);
-  if (!target) return;
-
-  openAncestorDetails(target);
-  clearGuideHighlights();
-  target.classList.add("guide-highlight");
-  target.scrollIntoView({ behavior: "smooth", block: "center" });
-
-  window.clearTimeout(guideHighlightTimeout);
-  guideHighlightTimeout = window.setTimeout(() => {
-    target.classList.remove("guide-highlight");
-  }, 2400);
-}
-
-function getNextStep(client) {
-  const runtime = getLumixRuntime(client);
-  if (runtime.nextStep) {
-    return runtime.nextStep;
-  }
-
-  if (!hasProfile(client)) {
-    return {
-      title: "Tee tämä seuraavaksi",
-      text: "Täytä intake ja tallenna yrityksen tiedot."
-    };
-  }
-
-  if (!hasContent(client)) {
-    return {
-      title: "Tee tämä seuraavaksi",
-      text: "Paina Generoi kaikki. Lumix tekee strategian ja sisällön samalla."
-    };
-  }
-
-  if (!client.publishHistory.length) {
-    return {
-      title: "Tee tämä seuraavaksi",
-      text: client.publishTargets.length
-        ? "Esikatsele sisältö ja julkaise valmis paketti."
-        : "Lisää ensin yksi julkaisukanava ja julkaise sitten valmis paketti."
-    };
-  }
-
-  return {
-    title: "Tämän jälkeen",
-    text: "Seuraa liidejä ja päivitä sisältöä tarpeen mukaan."
-  };
-}
-
-function getTourSteps(client) {
-  const steps = [
-    {
-      title: "Asiakkaat",
-      text: "Täältä valitset aina yhden asiakkaan kerrallaan.",
-      target: "[data-guide='clients']"
-    },
-    {
-      title: "Uusi asiakas",
-      text: "Tämä on aloituskohta. Lisää nimi ja kuvaus. Muut asetukset voi avata myöhemmin.",
-      target: "[data-guide='new-client']"
-    }
-  ];
-
-  if (client) {
-    steps.push(
-      {
-        title: "Yrityksen tiedot",
-        text: "Tähän tallennat mitä myydään, kenelle ja mikä on tärkein tavoite.",
-        target: "[data-guide='intake']"
-      },
-      {
-        title: "Generoi kaikki",
-        text: "Tämä on päätoiminto. Lumix tekee strategian, sivun, blogit ja SEO:n samalla.",
-        target: "[data-guide='generate']"
-      },
-      {
-        title: "Esikatsele sisältö",
-        text: "Täältä tarkistat sivun, blogit ja SEO:n ennen julkaisua.",
-        target: "[data-guide='preview']"
-      },
-      {
-        title: "Julkaise",
-        text: "Kun sisältö on valmis, julkaisu tehdään tästä.",
-        target: "[data-guide='publish']"
-      }
-    );
-  } else {
-    steps.push({
-      title: "Työalue",
-      text: "Kun ensimmäinen asiakas on luotu, varsinainen flow näkyy tässä.",
-      target: "[data-guide='workflow']"
-    });
-  }
-
-  steps.push({
-    title: "Muut asetukset",
-    text: "Harvemmin tarvittavat asetukset ja tekninen puoli ovat täällä erillään pääflow’sta.",
-    target: "[data-guide='more-settings']"
-  });
-
-  return steps.filter((step) => document.querySelector(step.target));
-}
-
-function finishTour() {
-  state.tourActive = false;
-  state.tourStepIndex = 0;
-  window.localStorage.setItem(lumixTourStorageKey, "1");
-  clearGuideHighlights();
-}
-
-function activateLumix() {
-  state.lumixHidden = false;
-  window.localStorage.setItem(lumixHiddenStorageKey, "0");
-  const activeClient = getActiveClient();
-  const coach = getCoachState(activeClient);
-
-  if (state.tourActive) {
-    const tourSteps = getTourSteps(activeClient);
-    const step = tourSteps[Math.min(state.tourStepIndex, Math.max(tourSteps.length - 1, 0))];
-
-    if (step?.target) {
-      highlightGuideTarget(step.target);
-      return;
-    }
-  }
-
-  if (coach?.target) {
-    renderCoach(activeClient);
-    highlightGuideTarget(coach.target);
-    return;
-  }
-}
-
-function getCoachState(client) {
-  if (!client) {
-    return {
-      title: "Lumix",
-      text: "Lumix toimii tässä dashboardissa. Luo ensin yksi asiakas, niin ohjaan seuraavaan kohtaan.",
-      target: "#client-form"
-    };
-  }
-
-  if (!hasProfile(client)) {
-    return {
-      title: "Lumix",
-      text: "Täytä ensin yrityksen tiedot ja tallenna ne.",
-      target: "[data-guide='intake']"
-    };
-  }
-
-  if (!client.strategyRecommendation) {
-    return {
-      title: "Lumix",
-      text: "Seuraava klikki on ehdotukseen. Sillä saat hyvän suunnan ennen generointia.",
-      target: "[data-guide='recommend']"
-    };
-  }
-
-  if (!hasContent(client)) {
-    return {
-      title: "Lumix",
-      text: "Nyt voit generoida sivun, blogit ja SEO:n yhdellä napilla.",
-      target: "[data-guide='generate']"
-    };
-  }
-
-  if (!client.publishTargets.length) {
-    return {
-      title: "Lumix",
-      text: "Lisää ensin yksi julkaisukanava lisäasetuksista.",
-      target: "[data-guide='publish-settings']"
-    };
-  }
-
-  if (!client.publishHistory.length) {
-    return {
-      title: "Lumix",
-      text: "Sisältö on valmis. Seuraava klikki on julkaisu.",
-      target: "[data-guide='publish']"
-    };
-  }
-
-  return {
-    title: "Lumix",
-    text: "Nyt seuraa liidejä ja katso mikä toimii parhaiten.",
-    target: "[data-guide='leads']"
-  };
-}
-
-function getLumixAssistState(clientId) {
-  return (
-    lumixAssistState.get(clientId) || {
-      reply: "",
-      suggestedUpdates: null
-    }
-  );
-}
-
-function buildIntakePayloadFromClient(client, overrides = {}) {
-  const profile = client.businessProfile || {};
-
-  return {
-    businessType: overrides.businessType ?? profile.businessType ?? "",
-    offerType: overrides.offerType ?? profile.offerType ?? "",
-    audienceType: overrides.audienceType ?? profile.audienceType ?? "",
-    goalType: overrides.goalType ?? profile.goalType ?? "",
-    toneType: overrides.toneType ?? profile.toneType ?? "",
-    geoFocus: overrides.geoFocus ?? profile.geoFocus ?? "",
-    pricePosition: overrides.pricePosition ?? profile.pricePosition ?? "",
-    mainCta: overrides.mainCta ?? profile.mainCta ?? "",
-    notes: overrides.notes ?? profile.rawNotes?.notes ?? ""
-  };
-}
-
-function renderCoach(client) {
-  if (state.lumixHidden) {
-    lumixCoach.innerHTML = `
-      <button type="button" class="lumix-coach-toggle" data-coach-action="expand">
-        <span class="lumix-coach-avatar">L</span>
-        <span>Lumix</span>
-      </button>
-    `;
+  if (storedId && clients.some((client) => client.id === storedId)) {
+    state.activeClientId = storedId;
     return;
   }
 
-  const tourSteps = getTourSteps(client);
-  if (state.tourActive && tourSteps.length) {
-    const currentIndex = Math.min(state.tourStepIndex, tourSteps.length - 1);
-    const step = tourSteps[currentIndex];
+  state.activeClientId = clients[0]?.id || null;
+  state.storage.activeClientId = state.activeClientId;
+  writeStorage();
+}
 
-    lumixCoach.innerHTML = `
-      <div class="lumix-coach-card">
-        <div class="lumix-coach-head">
-          <span class="lumix-coach-avatar">L</span>
-          <div>
-            <strong>Lumix opastus</strong>
-            <p>Kohta ${currentIndex + 1} / ${tourSteps.length}</p>
-          </div>
-          <button type="button" class="ghost-button lumix-coach-hide" data-coach-action="collapse">Piilota</button>
-        </div>
-        <div class="lumix-coach-step">
-          <strong>${escapeHtml(step.title)}</strong>
-          <p class="lumix-coach-text">${escapeHtml(step.text)}</p>
-        </div>
-        <div class="lumix-coach-actions">
-          <button
-            type="button"
-            class="ghost-button"
-            data-coach-action="prev"
-            ${currentIndex === 0 ? "disabled" : ""}
-          >
-            Edellinen
-          </button>
-          <button
-            type="button"
-            class="ghost-button"
-            data-coach-action="focus"
-            data-target="${escapeHtml(step.target)}"
-          >
-            Näytä kohta
-          </button>
-          <button type="button" data-coach-action="${currentIndex === tourSteps.length - 1 ? "finish" : "next"}">
-            ${currentIndex === tourSteps.length - 1 ? "Valmis" : "Seuraava"}
-          </button>
-        </div>
-        <button type="button" class="ghost-button lumix-coach-dismiss" data-coach-action="stop">
-          Lopeta opastus
+function getCatalogItems(key) {
+  return state.bootstrap?.lumix?.catalog?.[key] || [];
+}
+
+function getFirstCatalogValue(key, fallback = "") {
+  return getCatalogItems(key)[0]?.value || fallback;
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function deriveBusinessNameFromBrief(brief) {
+  const source = String(brief || "")
+    .split(/[.!?\n]/)
+    .find((item) => item.trim())
+    || "New business";
+
+  return source
+    .trim()
+    .split(/\s+/)
+    .slice(0, 4)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function normalizeStrategy(recommendation) {
+  if (!recommendation) return null;
+  return {
+    positioning: recommendation.positioning || "",
+    primaryOffer: recommendation.primaryOffer || "",
+    primaryAudience: recommendation.primaryAudience || "",
+    ctaStrategy: recommendation.ctaStrategy || "",
+    homepageStructure: Array.isArray(recommendation.homepageStructure) ? recommendation.homepageStructure : []
+  };
+}
+
+function hasGeneratedContent(client) {
+  return Boolean(client?.website?.html || client?.blogs?.length || client?.seo);
+}
+
+function getDerivedStep(client, uiState) {
+  if (!client) return "client";
+  if (!String(client.description || "").trim()) return "client";
+  if (!client.strategyRecommendation) return "strategy";
+  if (!uiState.strategyAccepted) return "strategy";
+  if (!hasGeneratedContent(client) || !uiState.generationComplete) return "generate";
+  if (!uiState.previewApproved) return "preview";
+  return "publish";
+}
+
+function getActiveStep(client, uiState) {
+  const derived = getDerivedStep(client, uiState);
+  const stored = uiState.activeStep || derived;
+  return STEP_ORDER.indexOf(stored) <= STEP_ORDER.indexOf(derived) ? stored : derived;
+}
+
+function buildStepStates(client, activeStep) {
+  const uiState = getClientUiState(client?.id || null);
+  const derived = getDerivedStep(client, uiState);
+  const highestDoneIndex = Math.max(0, STEP_ORDER.indexOf(derived) - 1);
+  const currentIndex = STEP_ORDER.indexOf(activeStep);
+  const reachableIndex = STEP_ORDER.indexOf(derived);
+
+  return STEP_ORDER.map((key, index) => {
+    let stateLabel = "upcoming";
+    if (index < currentIndex || index <= highestDoneIndex) stateLabel = "done";
+    if (index === currentIndex) stateLabel = "current";
+    if (!client && key === "client") stateLabel = "current";
+    return {
+      key,
+      label: STEP_LABELS[key],
+      state: stateLabel,
+      clickable: index <= Math.max(reachableIndex, currentIndex)
+    };
+  });
+}
+
+function renderStepRail(client, activeStep) {
+  stepList.innerHTML = buildStepStates(client, activeStep)
+    .map(
+      (step, index) => `
+        <button
+          type="button"
+          class="guided-step guided-step-${escapeHtml(step.state)}${step.clickable ? " is-clickable" : " is-disabled"}"
+          data-step-nav="${escapeHtml(step.key)}"
+          ${step.clickable ? "" : "disabled"}
+          ${step.state === "current" ? 'aria-current="step"' : ""}
+        >
+          <span class="guided-step-index">${escapeHtml(String(index + 1).padStart(2, "0"))}</span>
+          <span class="guided-step-label">${escapeHtml(step.label)}</span>
         </button>
-      </div>
-    `;
-    return;
-  }
-
-  const coach = getCoachState(client);
-  const assist = client ? getLumixAssistState(client.id) : { reply: "", suggestedUpdates: null };
-  const hasAssistReply = Boolean(assist.reply);
-
-  lumixCoach.innerHTML = `
-    <div class="lumix-coach-card">
-      <div class="lumix-coach-head">
-        <span class="lumix-coach-avatar">L</span>
-        <div>
-          <strong>${escapeHtml(coach.title)}</strong>
-          <p>Hiljainen apu seuraavaan kohtaan.</p>
-        </div>
-        <button type="button" class="ghost-button lumix-coach-hide" data-coach-action="collapse">Piilota</button>
-      </div>
-      <p class="lumix-coach-text">${escapeHtml(coach.text)}</p>
-      ${
-        client
-          ? `
-            <form class="lumix-coach-form" data-lumix-form data-client-id="${client.id}">
-              <label>
-                <span>Kirjoita idea Lumixille</span>
-                <textarea
-                  name="message"
-                  rows="3"
-                  placeholder="Esim. tee tästä premiumimpi, kohdenna hotelleille ja tee CTA tarjouspyyntöön."
-                  required
-                ></textarea>
-              </label>
-              <button type="submit">Kysy Lumixilta</button>
-            </form>
-          `
-          : ""
-      }
-      ${
-        hasAssistReply
-          ? `
-            <div class="lumix-coach-reply">
-              <strong>Lumix</strong>
-              <p>${escapeHtml(assist.reply)}</p>
-              ${
-                assist.suggestedUpdates && Object.keys(assist.suggestedUpdates).length
-                  ? `
-                    <div class="lumix-coach-mini-actions">
-                      <button type="button" class="ghost-button" data-coach-action="apply-suggestion">
-                        Käytä ehdotusta
-                      </button>
-                    </div>
-                  `
-                  : ""
-              }
-            </div>
-          `
-          : ""
-      }
-      <div class="lumix-coach-actions">
-        <button type="button" class="ghost-button" data-coach-action="focus" data-target="${escapeHtml(coach.target)}">
-          Näytä kohta
-        </button>
-        <button type="button" data-coach-action="start-tour">Aloita opastus</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderHealth(health) {
-  document.getElementById("ai-chip").textContent = health.liveAi ? "AI: käytössä" : "AI: demo";
-  document.getElementById("stripe-chip").textContent = health.stripeConfigured
-    ? "Stripe: käytössä"
-    : "Stripe: demo";
-  document.getElementById("scheduler-chip").textContent = `Ajastus: ${Math.round(
-    health.schedulerIntervalMs / 1000
-  )}s / jono ${Math.round(health.queueIntervalMs / 1000)}s`;
-}
-
-function renderSummary(summary) {
-  summaryGrid.innerHTML = [
-    ["Asiakkaat", summary.totalClients],
-    ["Luotu", summary.generatedClients],
-    ["Liidit", summary.totalLeads],
-    ["Jonossa", summary.pendingJobs]
-  ]
-    .map(
-      ([label, value]) => `
-        <article class="summary-card">
-          <p>${label}</p>
-          <strong>${value}</strong>
-        </article>
       `
     )
     .join("");
 }
 
-function renderJobs(jobs) {
-  if (!jobs.length) {
-    jobsList.innerHTML = '<article class="mini-card"><p>Ei töitä jonossa.</p></article>';
-    return;
-  }
-
-  jobsList.innerHTML = jobs
-    .map(
-      (job) => `
-        <article class="mini-card">
-          <strong>#${job.id} • ${escapeHtml(job.type)}</strong>
-          <p>${escapeHtml(job.status)}${job.clientId ? ` • asiakas ${job.clientId}` : ""}</p>
-          <p>Luotu ${formatDate(job.createdAt)}${job.completedAt ? ` • valmis ${formatDate(job.completedAt)}` : ""}</p>
-          ${job.error ? `<p>${escapeHtml(job.error)}</p>` : ""}
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderTeam(members) {
-  if (!members.length) {
-    teamList.innerHTML = '<article class="mini-card"><p>Ei tiimin jäseniä.</p></article>';
-    return;
-  }
-
-  teamList.innerHTML = members
-    .map(
-      (member) => `
-        <article class="mini-card">
-          <div>
-            <strong>${escapeHtml(member.email)}</strong>
-            <p>${escapeHtml(member.role)} • liittynyt ${formatDate(member.createdAt)}</p>
-          </div>
-          ${
-            state.bootstrap.user.role === "owner" && member.id !== state.bootstrap.user.id
-              ? `
-                <div class="mini-actions">
-                  <button class="ghost-button" data-action="set-role" data-member-id="${member.id}" data-role="admin" type="button">Tee admin</button>
-                  <button class="ghost-button" data-action="set-role" data-member-id="${member.id}" data-role="member" type="button">Tee jäsen</button>
-                </div>
-              `
-              : ""
-          }
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderReportForm(settings) {
-  const form = document.getElementById("report-form");
-  form.smtpHost.value = settings?.smtpHost || "";
-  form.smtpPort.value = settings?.smtpPort || "";
-  form.smtpUser.value = settings?.smtpUser || "";
-  form.smtpPass.value = settings?.smtpPass || "";
-  form.fromEmail.value = settings?.fromEmail || "";
-  form.recipients.value = (settings?.recipients || []).join(", ");
-  form.smtpSecure.checked = Boolean(settings?.smtpSecure);
-}
-
-function renderReportHistory(history) {
-  if (!history.length) {
-    reportHistory.innerHTML = '<article class="mini-card"><p>Ei raporttihistoriaa.</p></article>';
-    return;
-  }
-
-  reportHistory.innerHTML = history
-    .map(
-      (entry) => `
-        <article class="mini-card">
-          <strong>${escapeHtml(entry.status)}</strong>
-          <p>${escapeHtml(entry.message || "Ei viestiä")}</p>
-          <p>${formatDate(entry.createdAt)} • vastaanottajia ${entry.recipientCount}</p>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderLumixPanel() {
-  const agent = state.bootstrap?.lumix?.agent;
-  const catalog = getIntakeCatalog();
-  const model = state.bootstrap?.lumix?.model;
-  const codex = state.bootstrap?.lumix?.codex;
-  if (!agent) {
-    lumixSummary.textContent = "Lumix-data latautuu...";
-    lumixCodex.innerHTML = '<article class="mini-card"><p>Ei dataa vielä.</p></article>';
-    return;
-  }
-
-  lumixSummary.textContent = `${agent.name} auttaa pitämään flow’n selkeänä.`;
-  lumixCodex.innerHTML = `
-    <article class="mini-card">
-      <strong>${escapeHtml(agent.name)}</strong>
-      <p>${escapeHtml(agent.summary)}</p>
-    </article>
-    <article class="mini-card">
-      <strong>Miten Lumix auttaa</strong>
-      <p>${escapeHtml(codex?.intro || "")}</p>
-    </article>
-    <article class="mini-card">
-      <strong>Rakenne</strong>
-      <p>
-        objektit ${model?.objects?.length || 0},
-        linkit ${model?.links?.length || 0},
-        actionit ${model?.actions?.length || 0}
-      </p>
-    </article>
-    <article class="mini-card">
-      <strong>Ontologian runko</strong>
-      <p>
-        yritystyypit ${catalog.businessType.length},
-        tarjoomat ${catalog.offerType.length},
-        yleisöt ${catalog.audienceType.length},
-        tavoitteet ${catalog.goalType.length}
-      </p>
-    </article>
-  `;
-}
-
-function renderSeo(seo) {
-  if (!seo) return '<p class="body-copy">SEO-pakettia ei ole vielä luotu.</p>';
-  return `
-    <div class="seo-grid">
-      <div class="seo-item">
-        <span>Otsikko</span>
-        <strong>${escapeHtml(seo.title)}</strong>
-      </div>
-      <div class="seo-item">
-        <span>Kuvaus</span>
-        <strong>${escapeHtml(seo.metaDescription)}</strong>
-      </div>
-      <div class="seo-item">
-        <span>Avainsanat</span>
-        <strong>${escapeHtml(seo.keywords.join(", "))}</strong>
-      </div>
-      <div class="seo-item">
-        <span>Slug</span>
-        <strong>/${escapeHtml(seo.slug)}</strong>
-      </div>
-    </div>
-  `;
-}
-
-function renderBlogs(blogs) {
-  if (!blogs.length) return '<p class="body-copy">Ei blogiluonnoksia vielä.</p>';
-  return blogs
-    .map(
-      (blog) => `
-        <article class="blog-card">
-          <strong>${escapeHtml(blog.title)}</strong>
-          <p>${escapeHtml(blog.keyword)}</p>
-          <p>${escapeHtml(blog.excerpt)}</p>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function ensureArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function renderSelectOptions(options, selectedValue, placeholder) {
-  const rows = [];
-
-  if (placeholder) {
-    rows.push(`<option value="">${escapeHtml(placeholder)}</option>`);
-  }
-
-  return rows
+function renderClientSwitcher() {
+  const clients = getClients();
+  const options = ['<option value="">New client</option>']
     .concat(
-      options.map(
-        ({ value, label }) =>
-          `<option value="${escapeHtml(value)}"${selectedValue === value ? " selected" : ""}>${escapeHtml(label)}</option>`
+      clients.map(
+        (client) =>
+          `<option value="${client.id}"${client.id === state.activeClientId ? " selected" : ""}>${escapeHtml(client.businessName)}</option>`
       )
     )
     .join("");
+
+  clientSwitcher.innerHTML = options;
 }
 
-function renderIntake(client) {
-  const publishState = client.publishHistory.length ? "Julkaistu" : "Kesken";
-  const nextStep = getNextStep(client);
-  const profile = client.businessProfile || {};
-  const notes = profile.rawNotes?.notes || "";
-  const intakeCatalog = getIntakeCatalog();
+function renderShellMeta() {
+  const workspace = state.bootstrap?.user?.agencyName || "Lumix Workspace";
+  workspaceName.textContent = workspace;
+  renderClientSwitcher();
+}
+
+function renderBusinessStep(client, uiState) {
+  const brief = uiState.businessBrief || client?.description || state.storage.draftBrief || "";
+  const clientName = client ? `<p class="guided-step-context">Active client: ${escapeHtml(client.businessName)}</p>` : "";
 
   return `
-    <div class="stage-card client-stage-card" data-guide="intake">
-      <div class="primary-card-top">
-        <div>
-          <span class="section-kicker">Client</span>
-          <h4>${escapeHtml(client.businessName)}</h4>
-          <p class="body-copy">${escapeHtml(client.description)}</p>
-        </div>
-        <div class="primary-card-meta">
-          <span class="client-status">${escapeHtml(client.billingStatus)}</span>
-          <span class="client-status">${escapeHtml(publishState)}</span>
-        </div>
-      </div>
+    <article class="guided-card guided-card-main">
+      <span class="guided-step-tag">Step 1</span>
+      <h2>Tell us about your business</h2>
+      <p class="guided-step-copy">Describe what you do, who you help, and what you want to grow.</p>
+      ${clientName}
 
-      <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Paketti ${escapeHtml(client.plan)}</span>
-        <span class="flow-pill">Rytmi ${client.generationIntervalDays} pv</span>
-        <span class="flow-pill">Liidit ${client.analytics.leadSubmits}</span>
-      </div>
-
-      <div class="next-step-card">
-        <span class="section-kicker">${escapeHtml(nextStep.title)}</span>
-        <strong>${escapeHtml(nextStep.text)}</strong>
-      </div>
-
-      <div class="section-head section-head-compact">
-        <div>
-          <span class="section-kicker">Asiakastiedot</span>
-          <h5>Pidä perusrunko ajan tasalla</h5>
-        </div>
-        <p>Päivitä nämä ennen strategiaa ja generointia.</p>
-      </div>
-
-      <form class="stack-form intake-form intake-form-card" data-intake-form>
-        <div class="inline-grid">
-          <label>
-            <span>Yritystyyppi</span>
-            <select name="businessType">
-              ${renderSelectOptions(
-                intakeCatalog.businessType,
-                profile.businessType || "",
-                "Valitse yritystyyppi"
-              )}
-            </select>
-          </label>
-          <label>
-            <span>Kohderyhmä</span>
-            <select name="audienceType">
-              ${renderSelectOptions(
-                intakeCatalog.audienceType,
-                profile.audienceType || "",
-                "Valitse kohderyhmä"
-              )}
-            </select>
-          </label>
-        </div>
-
-        <div class="inline-grid">
-          <label>
-            <span>Päätavoite</span>
-            <select name="goalType">
-              ${renderSelectOptions(intakeCatalog.goalType, profile.goalType || "", "Valitse tavoite")}
-            </select>
-          </label>
-          <label>
-            <span>Pää-CTA</span>
-            <input
-              name="mainCta"
-              placeholder="Pyydä tarjous / Varaa aika / Ota yhteyttä"
-              value="${escapeHtml(profile.mainCta || "")}"
-            />
-          </label>
-        </div>
-
-        <details class="stage-subdetails">
-          <summary>Lisää tietoja</summary>
-
-          <div class="inline-grid">
-            <label>
-              <span>Tarjooma</span>
-              <select name="offerType">
-                ${renderSelectOptions(intakeCatalog.offerType, profile.offerType || "", "Valitse tarjooma")}
-              </select>
-            </label>
-            <label>
-              <span>Sävy</span>
-              <select name="toneType">
-                ${renderSelectOptions(intakeCatalog.toneType, profile.toneType || "", "Valitse sävy")}
-              </select>
-            </label>
-          </div>
-
-          <div class="inline-grid">
-            <label>
-              <span>Hintataso</span>
-              <select name="pricePosition">
-                ${renderSelectOptions(
-                  intakeCatalog.pricePosition,
-                  profile.pricePosition || "",
-                  "Valitse hintataso"
-                )}
-              </select>
-            </label>
-            <label>
-              <span>Alue / markkina</span>
-              <input
-                name="geoFocus"
-                placeholder="Helsinki, Suomi, verkossa..."
-                value="${escapeHtml(profile.geoFocus || "")}"
-              />
-            </label>
-          </div>
-
-          <label>
-            <span>Lisähuomiot</span>
-            <textarea name="notes" rows="4" placeholder="Kirjoita tähän vapaasti, jos asiakas ei tiedä vielä kaikkea tarkasti.">${escapeHtml(notes)}</textarea>
-          </label>
-        </details>
-
-        <button type="submit" class="ghost-button">Tallenna tiedot</button>
+      <form class="guided-form" data-brief-form>
+        <textarea name="brief" rows="8" placeholder="Describe your business in one sentence...">${escapeHtml(brief)}</textarea>
+        <button type="submit" class="guided-primary-button">Continue</button>
       </form>
-    </div>
+    </article>
   `;
 }
 
-function renderRecommendation(client) {
-  const recommendation = client.strategyRecommendation;
-  const runtime = getLumixRuntime(client);
-  const recommendationEligibility = runtime.actions.recommend_strategy;
+function renderStrategyCards(strategy, editable = false) {
+  const homepageStructure = Array.isArray(strategy?.homepageStructure) ? strategy.homepageStructure.join("\n") : "";
 
-  if (!hasProfile(client)) {
+  if (editable) {
     return `
-      <div class="stage-card stage-card-locked strategy-stage-card" data-guide="recommend">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Strategy</span>
-            <h4>Suunta lukittuna</h4>
-          </div>
-          <p>Client-kortti kesken.</p>
-        </div>
-        <p class="body-copy">Täydennä ensin yrityksen tiedot, niin strategia voidaan muodostaa tähän kohtaan.</p>
-      </div>
+      <label class="guided-field-card">
+        <span>Positioning</span>
+        <textarea name="positioning" rows="3">${escapeHtml(strategy?.positioning || "")}</textarea>
+      </label>
+      <label class="guided-field-card">
+        <span>Offer</span>
+        <textarea name="primaryOffer" rows="3">${escapeHtml(strategy?.primaryOffer || "")}</textarea>
+      </label>
+      <label class="guided-field-card">
+        <span>Audience</span>
+        <textarea name="primaryAudience" rows="3">${escapeHtml(strategy?.primaryAudience || "")}</textarea>
+      </label>
+      <label class="guided-field-card">
+        <span>CTA</span>
+        <textarea name="ctaStrategy" rows="3">${escapeHtml(strategy?.ctaStrategy || "")}</textarea>
+      </label>
+      <label class="guided-field-card guided-field-card-wide">
+        <span>Homepage structure</span>
+        <textarea name="homepageStructure" rows="5">${escapeHtml(homepageStructure)}</textarea>
+      </label>
     `;
   }
 
-  if (!recommendation) {
-    return `
-      <div class="stage-card strategy-stage-card" data-guide="recommend">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Strategy</span>
-            <h4>Valitse suunta</h4>
-          </div>
-          <p>Lukitse viesti ennen generointia.</p>
-        </div>
+  return `
+    <article class="guided-data-card">
+      <span>Positioning</span>
+      <strong>${escapeHtml(strategy?.positioning || "Not generated yet")}</strong>
+    </article>
+    <article class="guided-data-card">
+      <span>Offer</span>
+      <strong>${escapeHtml(strategy?.primaryOffer || "Not generated yet")}</strong>
+    </article>
+    <article class="guided-data-card">
+      <span>Audience</span>
+      <strong>${escapeHtml(strategy?.primaryAudience || "Not generated yet")}</strong>
+    </article>
+    <article class="guided-data-card">
+      <span>CTA</span>
+      <strong>${escapeHtml(strategy?.ctaStrategy || "Not generated yet")}</strong>
+    </article>
+    <article class="guided-data-card guided-data-card-wide">
+      <span>Homepage structure</span>
+      <strong>${escapeHtml((strategy?.homepageStructure || []).join(" → ") || "Not generated yet")}</strong>
+    </article>
+  `;
+}
 
-        <p class="body-copy">${escapeHtml(recommendationEligibility.reason || "Lumix ehdottaa viestin, CTA:n ja sisältökulmat.")}</p>
-        ${
-          recommendationEligibility.ready
-            ? `
-              <div class="stage-actions stage-actions-inline">
-                <button type="button" data-action="recommend" data-guide="recommend" class="ghost-button">Pyydä strategia</button>
+function renderStrategyStep(client, uiState) {
+  const strategy = uiState.strategyDraft || normalizeStrategy(client?.strategyRecommendation);
+  const editable = Boolean(uiState.strategyEditing);
+
+  if (!strategy) {
+    return `
+      <article class="guided-card guided-card-main">
+        <span class="guided-step-tag">Step 2</span>
+        <h2>Review your strategy</h2>
+        <p class="guided-step-copy">Generating a strategy from the saved business brief.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="guided-card guided-card-main">
+      <span class="guided-step-tag">Step 2</span>
+      <h2>Review your strategy</h2>
+      <p class="guided-step-copy">Lumix turned your brief into a positioning, offer, audience, CTA, and homepage direction.</p>
+
+      ${
+        editable
+          ? `
+              <form class="guided-form" data-strategy-form>
+                <div class="guided-data-grid">
+                  ${renderStrategyCards(strategy, true)}
+                </div>
+                <div class="guided-action-row">
+                  <button type="submit" class="guided-primary-button">Save strategy</button>
+                  <button type="button" class="guided-secondary-button" data-action="cancel-strategy-edit">Cancel</button>
+                </div>
+              </form>
+            `
+          : `
+              <div class="guided-data-grid">
+                ${renderStrategyCards(strategy, false)}
+              </div>
+              <div class="guided-action-row">
+                <button type="button" class="guided-primary-button" data-action="accept-strategy">Accept strategy</button>
+                <button type="button" class="guided-secondary-button" data-action="edit-strategy">Edit strategy</button>
               </div>
             `
-            : ""
-        }
-      </div>
+      }
+    </article>
+  `;
+}
+
+function renderGenerateStep(uiState) {
+  if (state.loadingGenerate) {
+    return `
+      <article class="guided-card guided-card-main guided-loading-card">
+        <span class="guided-step-tag">Step 3</span>
+        <h2>Generate your content pack</h2>
+        <div class="guided-loading-orb" aria-hidden="true"></div>
+        <strong>${escapeHtml(state.loadingGenerate.message)}</strong>
+        <p class="guided-step-copy">Lumix is creating your landing page, blog pack, and SEO package.</p>
+      </article>
     `;
   }
 
   return `
-    <div class="stage-card strategy-stage-card" data-guide="recommend">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Strategy</span>
-          <h4>Ehdotus valmis</h4>
-        </div>
-        <p>Pidä tämä koko ajan näkyvissä generoinnin tukena.</p>
+    <article class="guided-card guided-card-main">
+      <span class="guided-step-tag">Step 3</span>
+      <h2>Generate your content pack</h2>
+      <p class="guided-step-copy">Create everything in one run, then move directly into review.</p>
+
+      <div class="guided-output-list">
+        <article class="guided-output-item">
+          <strong>Landing page</strong>
+          <p>A customer-facing website draft with clear CTA structure.</p>
+        </article>
+        <article class="guided-output-item">
+          <strong>Blog pack</strong>
+          <p>Supporting content drafts built from the same strategic direction.</p>
+        </article>
+        <article class="guided-output-item">
+          <strong>SEO package</strong>
+          <p>Metadata, keywords, and search support aligned with the page.</p>
+        </article>
       </div>
 
-      <div class="result-two-up strategy-core-grid">
-        <div class="meta-box">
-          <strong>Positioning</strong>
-          <p>${escapeHtml(recommendation.positioning)}</p>
-        </div>
-        <div class="meta-box">
-          <strong>Pääpalvelu</strong>
-          <p>${escapeHtml(recommendation.primaryOffer)}</p>
-        </div>
-        <div class="meta-box">
-          <strong>CTA</strong>
-          <p>${escapeHtml(recommendation.ctaStrategy)}</p>
-        </div>
+      <div class="guided-action-row">
+        <button type="button" class="guided-primary-button" data-action="generate-content">Generate content</button>
       </div>
+    </article>
+  `;
+}
 
-      <div class="strategy-list strategy-list-inline">
-        <div class="seo-item">
-          <span>Pääkohderyhmä</span>
-          <strong>${escapeHtml(recommendation.primaryAudience)}</strong>
-        </div>
-        <div class="seo-item">
-          <span>Sisältökulmat</span>
-          <strong>${escapeHtml((recommendation.contentAngles || []).join(", "))}</strong>
-        </div>
-        <div class="seo-item">
-          <span>Etusivun rakenne</span>
-          <strong>${escapeHtml((recommendation.homepageStructure || []).join(" -> "))}</strong>
-        </div>
+function firstSentence(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const sentence = text.split(/(?<=[.!?])\s+/)[0] || text;
+  return sentence.trim();
+}
+
+function truncateText(value, maxLength = 160) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
+}
+
+function getPreviewBusinessName(client) {
+  return String(client?.businessName || "").trim() || "Northline Studio";
+}
+
+function getPreviewHeadline(client) {
+  const websiteHeadline = String(client?.website?.headline || "").trim();
+  const positioning = String(client?.strategyRecommendation?.positioning || "").trim();
+  const offer = String(client?.strategyRecommendation?.primaryOffer || "").trim();
+  const name = getPreviewBusinessName(client);
+
+  return websiteHeadline || positioning || offer || `${name} helps clients move with confidence`;
+}
+
+function getPreviewSubheadline(client) {
+  const websiteSubheadline = String(client?.website?.subheadline || "").trim();
+  const recommendation = client?.strategyRecommendation || {};
+  const description = firstSentence(client?.description || "");
+  const offer = String(recommendation.primaryOffer || "").trim();
+  const audience = String(recommendation.primaryAudience || "").trim();
+
+  if (websiteSubheadline) return websiteSubheadline;
+  if (description) return description;
+  if (offer && audience) return `${offer} for ${audience}, delivered with a clear process and practical guidance.`;
+  if (offer) return `${offer} built around clear communication, reliable delivery, and a simple next step for new enquiries.`;
+  return "We help clients turn interest into conversations with a clear offer, a trustworthy website, and a strong call to action.";
+}
+
+function getPreviewCta(client) {
+  return String(client?.website?.cta || client?.strategyRecommendation?.ctaStrategy || "").trim() || "Request a consultation";
+}
+
+function getPreviewAudience(client) {
+  return String(client?.strategyRecommendation?.primaryAudience || "").trim() || "growing businesses";
+}
+
+function getPreviewOffer(client) {
+  return String(client?.strategyRecommendation?.primaryOffer || "").trim() || firstSentence(client?.description || "") || "specialist business services";
+}
+
+function getPreviewServices(client) {
+  const offer = getPreviewOffer(client);
+  const audience = getPreviewAudience(client);
+  const angles = Array.isArray(client?.strategyRecommendation?.contentAngles) ? client.strategyRecommendation.contentAngles : [];
+
+  return [
+    {
+      title: offer,
+      body: truncateText(angles[0] || `${offer} planned around your business goals, audience, and buying process.`, 130)
+    },
+    {
+      title: "Project planning and guidance",
+      body: truncateText(angles[1] || `Clear recommendations, practical next steps, and a delivery plan that keeps the work moving.`, 130)
+    },
+    {
+      title: `Support for ${audience}`,
+      body: truncateText(angles[2] || `Messaging, structure, and service presentation shaped for the people most likely to enquire.`, 130)
+    }
+  ];
+}
+
+function getPreviewAboutCopy(client) {
+  const description = String(client?.description || "").trim();
+  const audience = getPreviewAudience(client);
+  const offer = getPreviewOffer(client);
+
+  return (
+    firstSentence(description) ||
+    `${getPreviewBusinessName(client)} provides ${offer} for ${audience}, with a focus on clear communication, dependable delivery, and a smooth customer experience from the first enquiry onward.`
+  );
+}
+
+function getPreviewTestimonial(client) {
+  const offer = getPreviewOffer(client);
+  const audience = getPreviewAudience(client);
+  const blogExcerpt = firstSentence(client?.blogs?.[0]?.excerpt || "");
+
+  return {
+    quote:
+      blogExcerpt ||
+      `We needed a clearer way to explain our service and make it easy for the right clients to get in touch. The new site finally does that.`,
+    name: "Mika Laakso",
+    role: `${audience.charAt(0).toUpperCase() + audience.slice(1)} client`,
+    context: offer
+  };
+}
+
+function getPreviewProcess(client) {
+  const cta = getPreviewCta(client);
+  return [
+    {
+      step: "1",
+      title: "Initial discussion",
+      body: `We start by understanding your goals, offer, and what matters most to your customers.`
+    },
+    {
+      step: "2",
+      title: "Clear proposal",
+      body: `You receive a practical plan covering the scope, timeline, and the best next move for the project.`
+    },
+    {
+      step: "3",
+      title: "Delivery and follow-through",
+      body: `${cta} when you are ready, and we take the work forward with clear communication and steady progress.`
+    }
+  ];
+}
+
+function renderFallbackLandingPreview(client) {
+  const name = getPreviewBusinessName(client);
+  const headline = getPreviewHeadline(client);
+  const subheadline = getPreviewSubheadline(client);
+  const cta = getPreviewCta(client);
+  const services = getPreviewServices(client);
+  const aboutCopy = getPreviewAboutCopy(client);
+  const testimonial = getPreviewTestimonial(client);
+  const process = getPreviewProcess(client);
+  const seoTitle = String(client?.seo?.title || "").trim();
+  const footerDescription = truncateText(
+    String(client?.seo?.metaDescription || client?.description || "").trim() || subheadline,
+    120
+  );
+
+  return `
+        <article class="guided-site-preview">
+          <header class="guided-site-header">
+            <strong>${escapeHtml(name)}</strong>
+            <nav class="guided-site-nav" aria-label="Website sections">
+              <span>Services</span>
+              <span>About</span>
+              <span>Process</span>
+              <span>Contact</span>
+            </nav>
+          </header>
+
+          <section class="guided-site-hero">
+            <div class="guided-site-hero-copy">
+              <span class="guided-site-kicker">Trusted business website</span>
+              <h3>${escapeHtml(headline)}</h3>
+              <p>${escapeHtml(subheadline)}</p>
+              <div class="guided-site-action-row">
+                <span class="guided-site-button guided-site-button-primary">${escapeHtml(cta)}</span>
+                <span class="guided-site-button guided-site-button-secondary">See services</span>
+              </div>
+            </div>
+
+            <aside class="guided-site-hero-aside">
+              <div class="guided-site-info-card">
+                <span>What we do</span>
+                <strong>${escapeHtml(getPreviewOffer(client))}</strong>
+              </div>
+              <div class="guided-site-info-card">
+                <span>Best fit for</span>
+                <strong>${escapeHtml(getPreviewAudience(client))}</strong>
+              </div>
+              <div class="guided-site-info-card">
+                <span>Next step</span>
+                <strong>${escapeHtml(cta)}</strong>
+              </div>
+            </aside>
+          </section>
+
+          <section class="guided-site-section">
+            <div class="guided-site-section-head">
+              <span class="guided-site-kicker">Services</span>
+              <h4>What clients come to us for</h4>
+            </div>
+            <div class="guided-site-service-grid">
+              ${services
+                .map(
+                  (service) => `
+                    <article class="guided-site-service-card">
+                      <strong>${escapeHtml(service.title)}</strong>
+                      <p>${escapeHtml(service.body)}</p>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+          </section>
+
+          <section class="guided-site-section guided-site-section-split">
+            <div>
+              <span class="guided-site-kicker">About</span>
+              <h4>Clear work, grounded communication, reliable delivery.</h4>
+              <p>${escapeHtml(aboutCopy)}</p>
+            </div>
+            <div class="guided-site-credibility-card">
+              <strong>${escapeHtml(seoTitle || `${name} | Professional service partner`)}</strong>
+              <p>${escapeHtml(footerDescription)}</p>
+            </div>
+          </section>
+
+          <section class="guided-site-section">
+            <div class="guided-site-section-head">
+              <span class="guided-site-kicker">Client feedback</span>
+              <h4>What clients say after launch</h4>
+            </div>
+            <blockquote class="guided-site-testimonial">
+              <p>${escapeHtml(`“${testimonial.quote}”`)}</p>
+              <footer>
+                <strong>${escapeHtml(testimonial.name)}</strong>
+                <span>${escapeHtml(`${testimonial.role} • ${testimonial.context}`)}</span>
+              </footer>
+            </blockquote>
+          </section>
+
+          <section class="guided-site-section">
+            <div class="guided-site-section-head">
+              <span class="guided-site-kicker">Process</span>
+              <h4>How the work moves forward</h4>
+            </div>
+            <div class="guided-site-process-grid">
+              ${process
+                .map(
+                  (item) => `
+                    <article class="guided-site-process-card">
+                      <span>${escapeHtml(item.step)}</span>
+                      <strong>${escapeHtml(item.title)}</strong>
+                      <p>${escapeHtml(item.body)}</p>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+          </section>
+
+          <section class="guided-site-final-cta">
+            <div>
+              <span class="guided-site-kicker">Get in touch</span>
+              <h4>Ready to discuss your project?</h4>
+              <p>Tell us what you need and we will come back with a clear next step.</p>
+            </div>
+            <span class="guided-site-button guided-site-button-primary">${escapeHtml(cta)}</span>
+          </section>
+
+          <footer class="guided-site-footer">
+            <div>
+              <strong>${escapeHtml(name)}</strong>
+              <p>${escapeHtml(footerDescription)}</p>
+            </div>
+            <div class="guided-site-footer-links">
+              <span>Services</span>
+              <span>About</span>
+              <span>Contact</span>
+            </div>
+          </footer>
+        </article>
+  `;
+}
+
+function renderLandingPreview(client) {
+  const previewMarkup = String(client?.website?.html || "").trim() || renderFallbackLandingPreview(client);
+  return `
+    <div class="guided-preview-browser guided-preview-browser-landing">
+      <div class="guided-preview-bar">
+        <div class="guided-preview-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <span class="guided-preview-url">${escapeHtml(`${client.businessName}.preview`)}</span>
       </div>
-
-      <div class="stage-actions stage-actions-inline">
-        <button type="button" data-action="recommend" class="ghost-button">Päivitä strategia</button>
+      <div class="guided-preview-surface guided-preview-surface-landing">
+        ${previewMarkup}
       </div>
     </div>
   `;
 }
 
-function renderPublishTargets(client) {
-  if (!client.publishTargets.length) return '<p class="body-copy">Ei julkaisukanavia vielä.</p>';
-  return client.publishTargets
-    .map(
-      (target) => `
-        <article class="mini-card">
-          <div>
-            <strong>${escapeHtml(target.name)}</strong>
-            <p>${escapeHtml(target.platform)} • ${target.autoPublish ? "automaattinen julkaisu" : "vain manuaalinen julkaisu"}</p>
-            <p>Viimeksi julkaistu: ${formatDate(target.lastPublishedAt)}</p>
-          </div>
-          <div class="mini-actions">
-            <button class="ghost-button" data-action="publish-target" data-target-id="${target.id}" type="button">Julkaise</button>
-          </div>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderPublishHistory(client) {
-  if (!client.publishHistory.length) return '<p class="body-copy">Ei julkaisuhistoriaa vielä.</p>';
-  return `
-    <ul class="history-list">
-      ${client.publishHistory
-        .map(
-          (entry) => `
-            <li>${escapeHtml(entry.status)} • target ${entry.publishTargetId} • ${formatDate(entry.createdAt)}${entry.message ? ` • ${escapeHtml(entry.message)}` : ""}</li>
-          `
-        )
-        .join("")}
-    </ul>
-  `;
-}
-
-function renderLeads(leads) {
-  if (!leads.length) return '<p class="body-copy">Ei liidejä vielä.</p>';
-  return leads
-    .map(
-      (lead) => `
-        <article class="mini-card">
-          <strong>${escapeHtml(lead.email)}</strong>
-          <p>${escapeHtml(lead.name || "Anonymous")} • ${formatDate(lead.createdAt)}</p>
-          <p>${escapeHtml(lead.message || "")}</p>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderLumixTimeline(client) {
-  const action = lumixActionState.get(client.id);
-  const runtime = getLumixRuntime(client);
-  const stages = [
-    {
-      key: "recommend",
-      label: "Suunta",
-      status: runtime.states.strategy.exists ? "done" : "idle",
-      meta: runtime.states.strategy.exists ? runtime.states.strategy.status : "odottaa"
-    },
-    {
-      key: "generate",
-      label: "Sisältö",
-      status: runtime.states.contentPack.status !== "empty" ? "done" : "idle",
-      meta: runtime.states.contentPack.status !== "empty"
-        ? `${runtime.states.contentPack.status}${client.lastGenerationAt ? ` • ${formatDate(client.lastGenerationAt)}` : ""}`
-        : "odottaa"
-    },
-    {
-      key: "publish",
-      label: "Julkaisu",
-      status: client.publishHistory.length ? "done" : "idle",
-      meta: client.publishTargets.length ? `${client.publishTargets.length} kanavaa` : "ei kanavaa"
-    }
-  ];
-
-  if (action?.action === "recommend_strategy") {
-    stages[0].status = "active";
-    stages[0].meta = "Lumix päivitti suuntaa";
-  } else if (action?.action === "generate_pack") {
-    stages[1].status = "active";
-    stages[1].meta = "Sisältö lisättiin jonoon";
-  } else if (action?.action === "publish_pack") {
-    stages[2].status = "active";
-    stages[2].meta = "Julkaisu lisättiin jonoon";
+function renderBlogsPreview(client) {
+  const blogs = client?.blogs || [];
+  if (!blogs.length) {
+    return `<div class="guided-preview-list"><article class="guided-preview-card"><strong>No blog drafts yet</strong><p>Generate content to create supporting articles for the website.</p></article></div>`;
   }
 
   return `
-    <div class="lumix-timeline">
-      ${stages
+    <div class="guided-preview-list">
+      ${blogs
+        .slice(0, 3)
         .map(
-          (stage, index) => `
-            <article class="timeline-step timeline-step-${stage.status}">
-              <span class="timeline-index">${index + 1}</span>
-              <strong>${escapeHtml(stage.label)}</strong>
-              <p>${escapeHtml(stage.meta)}</p>
+          (blog) => `
+            <article class="guided-preview-card">
+              <span>${escapeHtml(blog.keyword || "Primary topic")}</span>
+              <strong>${escapeHtml(blog.title)}</strong>
+              <p>${escapeHtml(blog.excerpt || "A supporting article preview for this website.")}</p>
             </article>
           `
         )
@@ -1100,1232 +801,660 @@ function renderLumixTimeline(client) {
   `;
 }
 
-function renderOntologySummary(client) {
-  const runtime = getLumixRuntime(client);
-  const objects = runtime.objectSummary || {};
-
+function renderSeoPreview(client) {
+  const seo = client?.seo;
+  const keywords = Array.isArray(seo?.keywords) ? seo.keywords : [];
   return `
-    <div class="flow-strip compact-stat-strip ontology-strip">
-      <span class="flow-pill">Offer ${objects.offer ? "valmis" : "puuttuu"}</span>
-      <span class="flow-pill">Audience ${objects.audience ? "valmis" : "puuttuu"}</span>
-      <span class="flow-pill">Goal ${objects.goal ? "valmis" : "puuttuu"}</span>
-      <span class="flow-pill">Voice ${objects.brandVoice ? "valmis" : "puuttuu"}</span>
+    <div class="guided-preview-list">
+      <article class="guided-preview-card">
+        <span>Meta title</span>
+        <strong>${escapeHtml(seo?.title || "No SEO title yet")}</strong>
+      </article>
+      <article class="guided-preview-card">
+        <span>Meta description</span>
+        <strong>${escapeHtml(seo?.metaDescription || seo?.description || "No SEO description yet")}</strong>
+      </article>
+      <article class="guided-preview-card">
+        <span>Keywords</span>
+        <strong>${escapeHtml(keywords.join(", ") || "No keywords yet")}</strong>
+      </article>
     </div>
   `;
 }
 
-function renderGenerateStage(client) {
-  const runtime = getLumixRuntime(client);
-  const generateEligibility = runtime.actions.generate_pack;
-
-  if (!generateEligibility.ready && !hasContent(client)) {
-    return `
-      <div class="stage-card stage-card-locked generate-stage-card" data-guide="generate">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Generate</span>
-            <h4>Generointi lukittuna</h4>
-          </div>
-          <p>Strategy puuttuu.</p>
-        </div>
-        <p class="body-copy">Pyydä ensin strategia, jotta generointi tapahtuu oikeaan suuntaan.</p>
-      </div>
-    `;
-  }
+function renderPreviewStep(client, uiState) {
+  const activeTab = uiState.previewTab || "landing";
+  const previewContent =
+    activeTab === "blogs" ? renderBlogsPreview(client) : activeTab === "seo" ? renderSeoPreview(client) : renderLandingPreview(client);
 
   return `
-    <div class="stage-card generate-stage-card" data-guide="generate">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Generate</span>
-          <h4>Generoi uusi paketti</h4>
-        </div>
-        <p>Päivitä sivu, blogit ja SEO samalla napilla.</p>
-      </div>
+    <article class="guided-card guided-card-main guided-card-preview">
+      <span class="guided-step-tag">Step 4</span>
+      <h2>Review your generated package</h2>
+      <p class="guided-step-copy">Check one view at a time before you move into publishing.</p>
 
-      <div class="stage-actions stage-actions-inline">
-        <button type="button" data-action="generate" data-guide="generate">Generoi sisältö</button>
-        <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Avaa sivu</a>
-      </div>
-
-      <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Sivu ${client.website?.html ? "valmis" : "kesken"}</span>
-        <span class="flow-pill">Blogit ${client.blogs.length}</span>
-        <span class="flow-pill">SEO ${client.seo ? "valmis" : "kesken"}</span>
-      </div>
-
-      <p class="body-copy generate-stage-note">
-        ${
-          client.lastGenerationAt
-            ? `Viimeisin generointi ${formatDate(client.lastGenerationAt)}.`
-            : "Tähän syntyy ensimmäinen valmis sisältöpaketti generoinnin jälkeen."
-        }
-      </p>
-    </div>
-  `;
-}
-
-function renderPreviewStage(client) {
-  if (!hasContent(client)) {
-    return `
-      <div class="stage-card stage-card-locked preview-stage-card">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Preview</span>
-            <h4>Esikatselu odottaa</h4>
-          </div>
-          <p>Ei sisältöä vielä.</p>
-        </div>
-        <p class="body-copy">
-          ${client.strategyRecommendation ? "Generoi ensin sisältö, niin preview aukeaa tähän suoraan." : "Tee ensin strategia ja generoi sitten sisältö."}
-        </p>
-      </div>
-    `;
-  }
-
-  const visibleBlogs = client.blogs.slice(0, 2);
-
-  return `
-    <div class="stage-card preview-stage-card">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Preview</span>
-          <h4>Näe mitä asiakkaalle syntyi</h4>
-        </div>
-        <p>Landing page, blogit ja SEO samassa kortissa.</p>
-      </div>
-
-      <div class="preview-main-panel">
-        <span class="section-kicker">Landing page</span>
-        <div class="site-frame stage-preview-frame">
-          <div class="generated-site">${client.website?.html || '<p class="body-copy">Sivua ei ole vielä generoitu.</p>'}</div>
-        </div>
-      </div>
-
-      <div class="preview-support-grid">
-        <div class="preview-support-panel">
-          <span class="section-kicker">Blogit</span>
-          <div class="blog-grid">${renderBlogs(visibleBlogs)}</div>
-        </div>
-        <div class="preview-support-panel">
-          <span class="section-kicker">SEO</span>
-          ${renderSeo(client.seo)}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderPublishStage(client) {
-  const runtime = getLumixRuntime(client);
-  const publishEligibility = runtime.actions.publish_pack;
-
-  if (!publishEligibility.ready && !hasContent(client)) {
-    return `
-      <div class="stage-card stage-card-locked">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Vaihe 5</span>
-          <h4>Julkaise</h4>
-        </div>
-        <p>Odottaa esikatselua.</p>
-      </div>
-      <p class="body-copy">${escapeHtml(publishEligibility.reason || "Generoi ensin sisältö.")}</p>
-    </div>
-    `;
-  }
-
-  return `
-    <div class="stage-card">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Vaihe 5</span>
-          <h4>Julkaise</h4>
-        </div>
-        <p>Vie valmis paketti ulos.</p>
-      </div>
-      <p class="body-copy stage-inline-note">
-        ${
-          client.publishTargets.length
-            ? `Julkaisukanavia ${client.publishTargets.length}.`
-            : "Julkaisukanavaa ei ole vielä lisätty."
-        }
-        ${client.publishHistory.length ? ` Viimeisin julkaisu ${formatDate(client.publishHistory[0].createdAt)}.` : ""}
-      </p>
-      <p class="body-copy">${escapeHtml(publishEligibility.reason || "")}</p>
-
-      ${
-        publishEligibility.ready
-          ? `
-            <div class="stage-actions">
-              <button type="button" data-action="publish-all" data-guide="publish">Julkaise sisältö</button>
-            </div>
-          `
-          : `
-            <p class="body-copy">Lisää ensin yksi julkaisukanava lisäasetuksista. Sen jälkeen julkaisu onnistuu tästä.</p>
-          `
-      }
-
-      ${
-        client.leads.length || client.analytics.leadSubmits
-          ? `
-            <details class="stage-subdetails">
-              <summary>Näytä liidit</summary>
-              <div class="mini-list">
-                ${renderLeads(client.leads.slice(0, 3))}
-              </div>
-            </details>
-          `
-          : ""
-      }
-    </div>
-  `;
-}
-
-function renderLeadsStage(client) {
-  const leadPreview = client.leads.slice(0, 3);
-
-  return `
-    <div class="stage-card">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Vaihe 5</span>
-          <h4>Liidit</h4>
-        </div>
-        <p>Näe tulos yhdellä silmäyksellä.</p>
-      </div>
-
-      <div class="flow-strip compact-stat-strip">
-        <span class="flow-pill">Näytöt ${client.analytics.pageViews}</span>
-        <span class="flow-pill">CTA ${client.analytics.ctaClicks}</span>
-        <span class="flow-pill">Liidit ${client.analytics.leadSubmits}</span>
-      </div>
-
-      <details class="stage-subdetails" open data-guide="leads">
-        <summary>Viimeisimmät liidit</summary>
-        <div class="mini-list">
-          ${leadPreview.length ? renderLeads(leadPreview) : '<p class="body-copy">Kun sivulla tehdään yhteydenottoja, ne näkyvät täällä.</p>'}
-        </div>
-      </details>
-    </div>
-  `;
-}
-
-function renderClientExtras(client) {
-  const history = client.generationHistory.length
-    ? `
-        <ul class="history-list">
-          ${client.generationHistory
-            .map(
-              (entry) => `
-                <li>${escapeHtml(entry.status)} • ${escapeHtml(entry.mode)} • ${formatDate(entry.createdAt)}${entry.message ? ` • ${escapeHtml(entry.message)}` : ""}</li>
-              `
-            )
-            .join("")}
-        </ul>
-      `
-    : '<p class="body-copy">Ei generointihistoriaa vielä.</p>';
-
-  const lumixAction = lumixActionState.get(client.id);
-
-  return `
-    <details class="panel client-ops-panel">
-      <summary>Lisäasetukset</summary>
-
-      <div class="client-extra-stack" data-client-id="${client.id}">
-        <div class="editor-frame ops-box">
-          <h4>Ohje agentille</h4>
-          <p class="body-copy">Tallenna tähän vain asiakaskohtaiset lisätoiveet.</p>
-          <textarea data-prompt-editor rows="4" placeholder="Asiakaskohtaiset ohjeet">${escapeHtml(client.customPrompt || "")}</textarea>
-          <button type="button" data-action="save-prompt" class="ghost-button">Tallenna ohje</button>
-        </div>
-
-        <div class="ops-compartment-grid">
-          <div class="publish-frame ops-box" data-guide="publish-settings">
-            <h4>Julkaisukanavat</h4>
-            <p class="body-copy">Lisää yksi kanava kerrallaan. Tekninen config on piilotettu alemmas.</p>
-            <div class="mini-list">${renderPublishTargets(client)}</div>
-            <form class="stack-form target-form" data-target-form>
-              <label>
-                <span>Kanavan nimi</span>
-                <input name="name" placeholder="Pääblogi" required />
-              </label>
-              <div class="inline-grid">
-                <label>
-                  <span>Alusta</span>
-                  <select name="platform">
-                    <option value="wordpress">WordPress</option>
-                    <option value="webflow">Webflow</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Osoite</span>
-                  <input name="baseUrl" placeholder="https://example.com" />
-                </label>
-              </div>
-              <label class="checkbox-row">
-                <input name="autoPublish" type="checkbox" />
-                <span>Julkaise automaattisesti</span>
-              </label>
-
-              <details class="stage-subdetails">
-                <summary>Lisää tekniset tiedot</summary>
-
-                <div class="inline-grid">
-                  <label>
-                    <span>Käyttäjä</span>
-                    <input name="username" placeholder="api-user" />
-                  </label>
-                  <label>
-                    <span>Salasana / app password</span>
-                    <input name="applicationPassword" placeholder="application password" />
-                  </label>
-                </div>
-
-                <div class="inline-grid">
-                  <label>
-                    <span>Status</span>
-                    <input name="status" placeholder="draft / published" />
-                  </label>
-                  <label>
-                    <span>API token</span>
-                    <input name="apiToken" placeholder="Webflow token" />
-                  </label>
-                </div>
-
-                <div class="inline-grid">
-                  <label>
-                    <span>Site ID</span>
-                    <input name="siteId" placeholder="webflow-site-id" />
-                  </label>
-                  <label>
-                    <span>Collection ID</span>
-                    <input name="collectionId" placeholder="webflow-collection-id" />
-                  </label>
-                </div>
-              </details>
-
-              <button type="submit" class="ghost-button">Lisää kanava</button>
-            </form>
-          </div>
-
-          <div class="history-frame ops-box">
-            <h4>Historia ja tila</h4>
-            <p class="body-copy">Täältä näet mitä järjestelmä on tehnyt ja mikä tila asiakkaalla on.</p>
-            <div class="split-history">
-              <div>
-                <span class="section-kicker">Generointihistoria</span>
-                ${history}
-              </div>
-              <div>
-                <span class="section-kicker">Julkaisuhistoria</span>
-                ${renderPublishHistory(client)}
-              </div>
-            </div>
-            ${
-              client.subscription
-                ? `<p class="body-copy">Tilaus: ${escapeHtml(client.subscription.status)}${client.subscription.currentPeriodEnd ? ` asti ${formatDate(client.subscription.currentPeriodEnd)}` : ""}</p>`
-                : '<p class="body-copy">Ei Stripe-tilausta tallennettuna.</p>'
-            }
-          </div>
-        </div>
-
-        <div class="ops-compartment-grid">
-          <div class="meta-box extra-actions-box ops-box">
-            <strong>Hallinta</strong>
-            <p>Harvemmin käytettävät toiminnot ovat täällä.</p>
-            <div class="stack-actions">
-              <button type="button" data-action="toggle-schedule" class="ghost-button">
-                ${client.scheduleEnabled ? "Pysäytä ajastus" : "Jatka ajastusta"}
-              </button>
-              <button type="button" data-action="checkout" class="ghost-button">Avaa checkout</button>
-            </div>
-          </div>
-
-          <details class="meta-box extra-actions-box ops-box debug-box">
-            <summary>Lumix debug</summary>
-            ${
-              lumixAction
-                ? `
-                  <div class="lumix-action-card">
-                    <strong>${escapeHtml(lumixAction.action)}</strong>
-                    <p>Objektit: ${lumixAction.objectCount} • Linkit: ${lumixAction.linkCount}</p>
-                    ${lumixAction.explanation?.reason ? `<p>${escapeHtml(lumixAction.explanation.reason)}</p>` : ""}
-                    ${
-                      lumixAction.explanation?.missingObjects?.length
-                        ? `<p>Puuttuu: ${escapeHtml(lumixAction.explanation.missingObjects.join(", "))}</p>`
-                        : ""
-                    }
-                    ${
-                      lumixAction.ready !== undefined
-                        ? `<p>Valmis ajoon: ${lumixAction.ready ? "kyllä" : "ei"}</p>`
-                        : ""
-                    }
-                    ${
-                      lumixAction.targetCount !== undefined
-                        ? `<p>Julkaisukohteet: ${lumixAction.targetCount}</p>`
-                        : ""
-                    }
-                  </div>
-                `
-                : '<p class="body-copy">Ei viimeisintä Lumix-debugia vielä.</p>'
-            }
-          </details>
-        </div>
-      </div>
-    </details>
-  `;
-}
-
-function renderEmptyWorkspace() {
-  activeClientView.innerHTML = `
-    <article class="panel workflow-empty dashboard-empty-card">
-      <div class="panel-head">
-        <div>
-          <span class="section-kicker">Lumix workspace</span>
-          <h2>Create your first client</h2>
-        </div>
-        <p>When you add a client, this area becomes a focused review space for strategy, content and SEO.</p>
-      </div>
-
-      <div class="flow-strip">
-        <span class="flow-pill">1. Client brief</span>
-        <span class="flow-pill">2. Strategy</span>
-        <span class="flow-pill">3. Generate</span>
-        <span class="flow-pill">4. Preview</span>
-        <span class="flow-pill">5. Publish</span>
-      </div>
-
-      <div class="next-step-card dashboard-empty-note">
-        <span class="section-kicker">Lumix</span>
-        <strong>Lumix turns the dashboard into one review flow instead of many disconnected admin panels.</strong>
-        <div class="stage-actions stage-actions-inline">
-          <button type="button" class="ghost-button" data-empty-action="lumix">Käynnistä Lumix</button>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-function renderClientSelector(clients) {
-  clientsCaption.textContent = formatClientCount(clients.length);
-
-  if (!clients.length) {
-    clientsList.innerHTML = '<article class="mini-card"><p>Ei asiakkaita vielä.</p></article>';
-    activeClientSelect.innerHTML = '<option value="">No clients yet</option>';
-    activeClientSelect.disabled = true;
-    renderEmptyWorkspace();
-    return;
-  }
-
-  const activeId = state.activeClientId;
-  activeClientSelect.disabled = false;
-  activeClientSelect.innerHTML = clients
-    .map(
-      (client) => `
-        <option value="${client.id}"${client.id === activeId ? " selected" : ""}>${escapeHtml(client.businessName)}</option>
-      `
-    )
-    .join("");
-
-  clientsList.innerHTML = clients
-    .map(
-      (client) => {
-        const nextAction = getLumixRuntime(client).nextStep?.actionId;
-        const statusLabel =
-          nextAction === "recommend_strategy"
-            ? "Generoi kaikki"
-            : nextAction === "generate_pack"
-              ? "Generoi kaikki"
-              : nextAction === "publish_pack"
-                ? "Julkaise"
-                : nextAction === "review_leads"
-                  ? "Valmis"
-                  : "Aloita tiedoista";
-
-        return `
-        <button
-          type="button"
-          class="client-selector-button${client.id === activeId ? " client-selector-button-active" : ""}"
-          data-client-select="${client.id}"
-        >
-          <div class="client-selector-row">
-            <strong>${escapeHtml(client.businessName)}</strong>
-            <span class="client-selector-status">${escapeHtml(statusLabel)}</span>
-          </div>
-        </button>
-      `;
-      }
-    )
-    .join("");
-}
-
-function getStatusHeroContent(client) {
-  if (!hasProfile(client)) {
-    return {
-      eyebrow: "Client setup",
-      title: "Client profile is still missing the basics.",
-      text: "Fill the client brief first so Lumix can turn it into a usable strategy and content direction.",
-      action: {
-        label: "Open client brief",
-        className: "ghost-button",
-        guide: "intake",
-        action: null
-      }
-    };
-  }
-
-  if (!client.strategyRecommendation) {
-    return {
-      eyebrow: "Lumix status",
-      title: "Client ready. Next step: create the strategy.",
-      text: "Lumix can now generate positioning, offer framing and content angles for this client.",
-      action: {
-        label: "Build strategy",
-        className: "dashboard-cta-button",
-        guide: "recommend",
-        action: "recommend"
-      }
-    };
-  }
-
-  if (!hasContent(client)) {
-    return {
-      eyebrow: "Lumix status",
-      title: "Strategy ready. Next step: generate your content.",
-      text: "The positioning and content direction are ready. Generate the landing page, blogs and SEO package from the same flow.",
-      action: {
-        label: "Generate everything",
-        className: "dashboard-cta-button",
-        guide: "generate",
-        action: "generate"
-      }
-    };
-  }
-
-  if (!client.publishHistory.length) {
-    return {
-      eyebrow: "Lumix status",
-      title: "Content ready. Next step: review and publish.",
-      text: "Landing page, blog content and SEO direction are ready for review. Publish when the package looks good.",
-      action: {
-        label: client.publishTargets.length ? "Publish now" : "Content ready",
-        className: client.publishTargets.length ? "dashboard-cta-button" : "ghost-button",
-        guide: client.publishTargets.length ? "publish" : "publish-settings",
-        action: client.publishTargets.length ? "publish-all" : null
-      }
-    };
-  }
-
-  return {
-    eyebrow: "Lumix status",
-    title: "Published. Next step: track leads and iterate.",
-    text: "The first package is live. Review leads, refresh content and continue improving the account from the same workspace.",
-    action: {
-      label: "Generate another round",
-      className: "dashboard-cta-button",
-      guide: "generate",
-      action: "generate"
-    }
-  };
-}
-
-function renderPreviewPanel(client) {
-  const activeTab = getActivePreviewTab(client);
-  const tabs = getPreviewTabs(client);
-  const activeBlogIndex = activeTab.startsWith("blog-") ? Number(activeTab.split("-")[1]) : -1;
-  const activeBlog = activeBlogIndex >= 0 ? client.blogs[activeBlogIndex] : null;
-
-  let previewContent = "";
-  if (activeTab === "landing") {
-    previewContent = `
-      <div class="preview-window preview-window-landing">
-        <div class="tag">Website preview</div>
-        <h3>${escapeHtml(client.website?.headline || client.businessName)}</h3>
-        <p>${escapeHtml(client.website?.subheadline || client.description)}</p>
-        <div class="preview-actions">
-          <button class="dashboard-cta-button" type="button">${escapeHtml(client.website?.cta || "Get in touch")}</button>
-          <a class="ghost-link compact-link" href="/client/${client.id}" target="_blank" rel="noopener">Open public page</a>
-        </div>
-      </div>
-    `;
-  } else if (activeTab === "seo") {
-    previewContent = `
-      <div class="preview-window preview-window-article">
-        <div class="tag">SEO preview</div>
-        <h3>${escapeHtml(client.seo?.title || `${client.businessName} SEO package`)}</h3>
-        <p>${escapeHtml(client.seo?.metaDescription || "SEO metadata appears here after generation.")}</p>
-        <div class="preview-meta-stack">
-          <div class="preview-meta-item">
-            <span>Slug</span>
-            <strong>/${escapeHtml(client.seo?.slug || client.businessName.toLowerCase().replaceAll(/\s+/g, "-"))}</strong>
-          </div>
-          <div class="preview-meta-item">
-            <span>Keywords</span>
-            <strong>${escapeHtml(ensureArray(client.seo?.keywords).join(", ") || "No keywords yet")}</strong>
-          </div>
-        </div>
-      </div>
-    `;
-  } else {
-    previewContent = `
-      <div class="preview-window preview-window-article">
-        <div class="tag">Blog preview</div>
-        <h3>${escapeHtml(activeBlog?.title || "Blog draft")}</h3>
-        <p>${escapeHtml(activeBlog?.excerpt || stripHtmlPreview(activeBlog?.html) || "Blog preview appears here after generation.")}</p>
-        <div class="preview-meta-stack">
-          <div class="preview-meta-item">
-            <span>Keyword</span>
-            <strong>${escapeHtml(activeBlog?.keyword || "No keyword yet")}</strong>
-          </div>
-          <div class="preview-meta-item">
-            <span>Status</span>
-            <strong>Draft preview</strong>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  return `
-    <section class="card dashboard-preview-card">
-      <div class="tabs dashboard-preview-tabs">
-        ${tabs
+      <div class="guided-tab-row" role="tablist" aria-label="Preview tabs">
+        ${["landing", "blogs", "seo"]
           .map(
             (tab) => `
-              <button type="button" class="tab${tab.id === activeTab ? " active" : ""}" data-preview-tab="${tab.id}">
-                ${escapeHtml(tab.label)}
+              <button
+                type="button"
+                class="guided-tab-button${activeTab === tab ? " is-active" : ""}"
+                data-preview-tab="${tab}"
+                role="tab"
+                aria-selected="${String(activeTab === tab)}"
+              >
+                ${escapeHtml(tab.charAt(0).toUpperCase() + tab.slice(1))}
               </button>
             `
           )
           .join("")}
       </div>
 
-      <div class="preview">
+      <div class="guided-preview-wrap">
         ${previewContent}
       </div>
-    </section>
-  `;
-}
 
-function renderClientSummaryCard(client) {
-  const profile = client.businessProfile || {};
-  return `
-    <section class="card side-card dashboard-side-card">
-      <div class="eyebrow">Client</div>
-      <h4>${escapeHtml(client.businessName)}</h4>
-      <div class="summary-list">
-        <div><strong>Plan:</strong> ${escapeHtml(client.plan)}</div>
-        <div><strong>Audience:</strong> ${escapeHtml(profile.audienceType || "Not defined yet")}</div>
-        <div><strong>CTA:</strong> ${escapeHtml(profile.mainCta || client.website?.cta || "Not defined yet")}</div>
-        <div><strong>Market:</strong> ${escapeHtml(profile.geoFocus || "Not defined yet")}</div>
-      </div>
-    </section>
-  `;
-}
-
-function renderStrategySummaryCard(client) {
-  const recommendation = client.strategyRecommendation;
-  if (!recommendation) {
-    return `
-      <section class="card side-card dashboard-side-card">
-        <div class="eyebrow">Strategy summary</div>
-        <h4>Waiting for Lumix</h4>
-        <p class="muted">Build the strategy first to populate audience, offer and content direction here.</p>
-      </section>
-    `;
-  }
-
-  return `
-    <section class="card side-card dashboard-side-card">
-      <div class="eyebrow">Strategy summary</div>
-      <h4>What Lumix built</h4>
-      <div class="summary-list">
-        <div><strong>Audience:</strong> ${escapeHtml(recommendation.primaryAudience)}</div>
-        <div><strong>Positioning:</strong> ${escapeHtml(recommendation.positioning)}</div>
-        <div><strong>Offer:</strong> ${escapeHtml(recommendation.primaryOffer)}</div>
-        <div><strong>Channels:</strong> ${escapeHtml(["Landing page", "Blog", "SEO"].join(", "))}</div>
-      </div>
-    </section>
-  `;
-}
-
-function renderPerformanceCard(client) {
-  return `
-    <section class="card side-card dashboard-side-card">
-      <div class="eyebrow">Performance</div>
-      <h4>Quick overview</h4>
-      <div class="metric">
-        <span>Page views</span>
-        <strong>${client.analytics.pageViews}</strong>
-      </div>
-      <div class="metric">
-        <span>CTA clicks</span>
-        <strong>${client.analytics.ctaClicks}</strong>
-      </div>
-      <div class="metric">
-        <span>Leads</span>
-        <strong>${client.analytics.leadSubmits}</strong>
-      </div>
-    </section>
-  `;
-}
-
-function renderPublishCard(client) {
-  const canPublish = hasContent(client) && client.publishTargets.length;
-  return `
-    <section class="card side-card dashboard-side-card">
-      <div class="eyebrow">Publish</div>
-      <h4>${canPublish ? "Ready to go live" : "Prepare publishing"}</h4>
-      <div class="publish-box">
-        <p class="muted">
-          ${
-            canPublish
-              ? "Your content is ready for review. Publish when the landing page, blogs and SEO setup look good."
-              : client.publishTargets.length
-                ? "Generate the content first. Then you can publish it directly from here."
-                : "Add at least one publish target in the settings panel before going live."
-          }
-        </p>
-        ${
-          canPublish
-            ? `<button type="button" class="dashboard-cta-button" data-action="publish-all">Publish now</button>`
-            : client.publishTargets.length
-              ? `<button type="button" class="ghost-button" data-action="generate">Generate first</button>`
-              : `<div class="dashboard-inline-note">Add a publish target from the settings below.</div>`
-        }
-      </div>
-    </section>
-  `;
-}
-
-function renderStatusHero(client) {
-  const hero = getStatusHeroContent(client);
-
-  return `
-    <section class="card status-card dashboard-status-card">
-      <div>
-        <div class="eyebrow">${escapeHtml(hero.eyebrow)}</div>
-        <h2>${escapeHtml(hero.title)}</h2>
-        <p>${escapeHtml(hero.text)}</p>
-      </div>
-      <div>
-        ${
-          hero.action.action
-            ? `<button type="button" class="${hero.action.className}" data-action="${hero.action.action}"${hero.action.guide ? ` data-guide="${hero.action.guide}"` : ""}>${escapeHtml(hero.action.label)}</button>`
-            : `<button type="button" class="${hero.action.className}"${hero.action.guide ? ` data-guide="${hero.action.guide}"` : ""}>${escapeHtml(hero.action.label)}</button>`
-        }
-      </div>
-    </section>
-  `;
-}
-
-function renderActiveClient(client) {
-  activeClientView.innerHTML = `
-    <article class="dashboard-active-workspace" data-client-id="${client.id}">
-      ${renderStatusHero(client)}
-
-      <div class="layout dashboard-active-layout">
-        <div>
-          <div class="column dashboard-preview-column">
-            ${renderPreviewPanel(client)}
-          </div>
-        </div>
-
-        <aside class="right-column dashboard-active-side">
-          ${renderClientSummaryCard(client)}
-          ${renderStrategySummaryCard(client)}
-          ${renderPerformanceCard(client)}
-          ${renderPublishCard(client)}
-        </aside>
-      </div>
-
-      <div class="dashboard-bottom-panels">
-        ${renderIntake(client)}
-        ${renderClientExtras(client)}
+      <div class="guided-action-row">
+        <button type="button" class="guided-primary-button" data-action="approve-preview">Approve preview</button>
+        <button type="button" class="guided-secondary-button" data-action="go-back-generate">Go back</button>
       </div>
     </article>
   `;
 }
 
+function renderPublishConnector(uiState, client) {
+  const draft = uiState.publishDraft || createDefaultClientUiState().publishDraft;
+  const platform = draft.platform || "wordpress";
+  return `
+    <form class="guided-form guided-publish-form" data-publish-target-form>
+      <div class="guided-inline-grid">
+        <label>
+          <span>Platform</span>
+          <select name="platform">
+            <option value="wordpress"${platform === "wordpress" ? " selected" : ""}>WordPress</option>
+            <option value="webflow"${platform === "webflow" ? " selected" : ""}>Webflow</option>
+          </select>
+        </label>
+        <label>
+          <span>Channel name</span>
+          <input name="name" value="${escapeHtml(draft.name || `${client.businessName} site`)}" />
+        </label>
+      </div>
+
+      ${
+        platform === "wordpress"
+          ? `
+              <div class="guided-inline-grid">
+                <label>
+                  <span>Base URL</span>
+                  <input name="baseUrl" placeholder="https://example.com" value="${escapeHtml(draft.baseUrl || "")}" />
+                </label>
+                <label>
+                  <span>Username</span>
+                  <input name="username" placeholder="api-user" value="${escapeHtml(draft.username || "")}" />
+                </label>
+              </div>
+              <label>
+                <span>Application password</span>
+                <input name="applicationPassword" placeholder="xxxx xxxx xxxx xxxx" value="${escapeHtml(draft.applicationPassword || "")}" />
+              </label>
+            `
+          : `
+              <div class="guided-inline-grid">
+                <label>
+                  <span>Site URL</span>
+                  <input name="siteUrl" placeholder="https://your-site.webflow.io" value="${escapeHtml(draft.siteUrl || "")}" />
+                </label>
+                <label>
+                  <span>Collection ID</span>
+                  <input name="collectionId" placeholder="collection_id" value="${escapeHtml(draft.collectionId || "")}" />
+                </label>
+              </div>
+              <label>
+                <span>API token</span>
+                <input name="token" placeholder="wf_xxx" value="${escapeHtml(draft.token || "")}" />
+              </label>
+            `
+      }
+
+      <div class="guided-action-row">
+        <button type="submit" class="guided-primary-button">Save channel</button>
+      </div>
+    </form>
+  `;
+}
+
+function getPublishUrl(client, uiState) {
+  if (uiState.publishedUrl) return uiState.publishedUrl;
+
+  const target = client?.publishTargets?.[0];
+  const targetUrl =
+    target?.config?.siteUrl ||
+    target?.config?.baseUrl ||
+    (client?.id ? `${window.location.origin}/client/${client.id}` : "");
+
+  if (targetUrl) return targetUrl;
+  return client?.id ? `${window.location.origin}/client/${client.id}` : "";
+}
+
+function renderPublishStep(client, uiState) {
+  const hasTarget = Boolean(client?.publishTargets?.length);
+  const published = Boolean(uiState.published || client?.publishHistory?.length);
+  const publishUrl = getPublishUrl(client, uiState);
+
+  if (published) {
+    return `
+      <article class="guided-card guided-card-main">
+        <span class="guided-step-tag">Step 5</span>
+        <h2>Your site is live</h2>
+        <p class="guided-step-copy">The publish flow completed and the site can now be reviewed at the live destination.</p>
+        <div class="guided-success-card">
+          <strong>${escapeHtml(publishUrl || "https://your-site-url.com")}</strong>
+        </div>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="guided-card guided-card-main">
+      <span class="guided-step-tag">Step 5</span>
+      <h2>Publish your site</h2>
+      <p class="guided-step-copy">Keep this step lightweight. Connect one channel if needed, then publish when ready.</p>
+
+      <div class="guided-publish-card${hasTarget ? " is-ready" : " is-blocked"}">
+        <span class="guided-publish-state">${hasTarget ? "Ready to publish" : "Publish channel missing"}</span>
+        <strong>${hasTarget ? "Your content pack is ready for launch." : "Connect one publish channel to unlock go live."}</strong>
+        <p>
+          ${
+            hasTarget
+              ? escapeHtml(client.publishTargets[0].name || "Primary website")
+              : "A single connected channel is enough to move forward."
+          }
+        </p>
+      </div>
+
+      ${
+        !hasTarget && uiState.publishFormOpen
+          ? renderPublishConnector(uiState, client)
+          : ""
+      }
+
+      <div class="guided-action-row">
+        ${
+          hasTarget
+            ? '<button type="button" class="guided-primary-button" data-action="publish-now">Publish now</button>'
+            : '<button type="button" class="guided-primary-button" data-action="open-publish-form">Connect publish channel</button>'
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderCurrentStep() {
+  const client = getActiveClient();
+  const uiState = getClientUiState(client?.id || null);
+
+  if (client?.strategyRecommendation && hasGeneratedContent(client)) {
+    uiState.strategyAccepted = true;
+    uiState.generationComplete = true;
+  }
+
+  if (client?.publishHistory?.length) {
+    uiState.previewApproved = true;
+    uiState.published = true;
+  }
+
+  const activeStep = getActiveStep(client, uiState);
+
+  uiState.activeStep = activeStep;
+  uiState.publishReady = Boolean(client?.publishTargets?.length);
+  if (client?.publishHistory?.length) {
+    uiState.published = true;
+    uiState.publishedUrl = getPublishUrl(client, uiState);
+  }
+  writeStorage();
+
+  renderStepRail(client, activeStep);
+
+  if (activeStep === "client") {
+    mainView.innerHTML = renderBusinessStep(client, uiState);
+    return;
+  }
+
+  if (activeStep === "strategy") {
+    mainView.innerHTML = renderStrategyStep(client, uiState);
+    return;
+  }
+
+  if (activeStep === "generate") {
+    mainView.innerHTML = renderGenerateStep(uiState);
+    return;
+  }
+
+  if (activeStep === "preview") {
+    mainView.innerHTML = renderPreviewStep(client, uiState);
+    return;
+  }
+
+  mainView.innerHTML = renderPublishStep(client, uiState);
+}
+
 function render() {
   if (!state.bootstrap) return;
-
-  const clients = state.bootstrap.clients || [];
-  syncActiveClientId(clients);
-
-  renderHealth(state.bootstrap.health);
-  renderSummary(state.bootstrap.summary);
-  renderJobs(state.bootstrap.jobs || []);
-  renderTeam(state.bootstrap.members || []);
-  renderReportForm(state.bootstrap.reportSettings);
-  renderReportHistory(state.bootstrap.reportHistory || []);
-  renderLumixPanel();
-
-  agencyTitle.textContent = `${state.bootstrap.user.agencyName}`;
-  agencySubtitle.textContent = activeClientSelect.disabled
-    ? "Build your website, content and SEO in one clear flow."
-    : "Build your website, content and SEO in one clear flow.";
-  document.getElementById("team-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
-  document.getElementById("report-form").classList.toggle("hidden", state.bootstrap.user.role === "member");
-  document.getElementById("send-report-button").classList.toggle("hidden", state.bootstrap.user.role === "member");
-
-  renderClientSelector(clients);
-
-  const activeClient = getActiveClient();
-  if (activeClient) {
-    agencySubtitle.textContent = `${activeClient.businessName} in review. Build your website, content and SEO in one clear flow.`;
-    renderActiveClient(activeClient);
-    primaryGenerateButton.disabled = false;
-    primaryGenerateButton.textContent = hasContent(activeClient) ? "Generate another round" : "Generate everything";
-  } else {
-    renderEmptyWorkspace();
-    primaryGenerateButton.disabled = true;
-    primaryGenerateButton.textContent = "Generate everything";
-  }
-
-  if (!state.tourInitialized) {
-    state.tourInitialized = true;
-    state.tourActive = false;
-    state.tourStepIndex = 0;
-    state.lumixHidden = window.localStorage.getItem(lumixHiddenStorageKey) === "1";
-  }
-
-  renderCoach(activeClient);
-
-  if (state.tourActive) {
-    const tourSteps = getTourSteps(activeClient);
-    const step = tourSteps[Math.min(state.tourStepIndex, Math.max(tourSteps.length - 1, 0))];
-    if (step) {
-      highlightGuideTarget(step.target);
-    }
-  }
+  renderShellMeta();
+  renderCurrentStep();
 }
 
-async function refresh() {
-  state.bootstrap = await api("/api/bootstrap");
-
-  if (!state.bootstrap.authenticated) {
-    window.location.href = "/login";
-    return;
-  }
-
-  render();
-}
-
-document.getElementById("logout-button").addEventListener("click", async () => {
-  await runAction("Kirjaudutaan ulos...", async () => {
-    await api("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  });
-});
-
-document.getElementById("client-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const raw = readForm(form);
-  const payload = {
-    businessName: raw.businessName,
-    description: raw.description,
-    customPrompt: raw.customPrompt,
-    plan: raw.plan,
-    generationIntervalDays: Number(raw.generationIntervalDays),
-    autoGenerate: Boolean(raw.autoGenerate),
-    scheduleEnabled: Boolean(raw.scheduleEnabled)
+function buildMinimalIntakePayload(client, brief) {
+  const profile = client?.businessProfile || {};
+  return {
+    businessType: profile.businessType || getFirstCatalogValue("businessType", "b2b_service"),
+    offerType: profile.offerType || getFirstCatalogValue("offerType", "service"),
+    audienceType: profile.audienceType || getFirstCatalogValue("audienceType", "small_businesses"),
+    goalType: profile.goalType || getFirstCatalogValue("goalType", "lead_generation"),
+    toneType: profile.toneType || getFirstCatalogValue("toneType", "trusted"),
+    geoFocus: profile.geoFocus || "",
+    pricePosition: profile.pricePosition || getFirstCatalogValue("pricePosition", "standard"),
+    mainCta: profile.mainCta || "Book a call",
+    notes: brief
   };
+}
 
-  await runAction(`Luodaan asiakasta ${payload.businessName}...`, async () => {
+async function submitBrief(brief) {
+  const clients = getClients();
+  const activeClient = getActiveClient();
+  let clientId = activeClient?.id || null;
+
+  if (!clientId) {
     const result = await api("/api/clients", {
       method: "POST",
-      body: JSON.stringify(payload)
-    });
-    form.reset();
-    state.activeClientId = result.client?.id || state.activeClientId;
-    setStatus(
-      result.job
-        ? `Asiakas luotu. Generointi lisätty jonoon (#${result.job.id}).`
-        : result.generationDecision?.reason
-          ? `Asiakas luotu. ${result.generationDecision.reason}`
-          : "Asiakas luotu."
-    );
-    await refresh();
-  });
-});
-
-document.getElementById("team-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const raw = readForm(form);
-
-  await runAction(`Lisätään jäsentä ${raw.email}...`, async () => {
-    await api("/api/team-members", {
-      method: "POST",
-      body: JSON.stringify(raw)
-    });
-    form.reset();
-    await refresh();
-  });
-});
-
-document.getElementById("report-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const raw = readForm(event.currentTarget);
-
-  await runAction("Tallennetaan raporttiasetuksia...", async () => {
-    await api("/api/reports/settings", {
-      method: "PUT",
-      body: JSON.stringify(raw)
-    });
-    await refresh();
-  });
-});
-
-document.getElementById("send-report-button").addEventListener("click", async () => {
-  await runAction("Lisätään raportti jonoon...", async () => {
-    const result = await api("/api/reports/send", { method: "POST" });
-    setStatus(`Raportti lisätty jonoon (#${result.job.id}).`);
-    await refresh();
-  });
-});
-
-document.getElementById("scheduler-button").addEventListener("click", async () => {
-  await runAction("Ajetaan ajastettuja töitä...", async () => {
-    const result = await api("/api/scheduler/run-now", { method: "POST" });
-    setStatus(`Ajastus lisäsi ${result.results.length} työtä jonoon.`);
-    await refresh();
-  });
-});
-
-document.getElementById("worker-button").addEventListener("click", async () => {
-  await runAction("Ajetaan jono nyt...", async () => {
-    const result = await api("/api/worker/run-now", { method: "POST" });
-    setStatus(`Jono käsitteli ${result.results.length} työtä.`);
-    await refresh();
-  });
-});
-
-teamList.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-action='set-role']");
-  if (!button) return;
-
-  await runAction("Päivitetään käyttäjän roolia...", async () => {
-    await api(`/api/team-members/${button.dataset.memberId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ role: button.dataset.role })
-    });
-    await refresh();
-  });
-});
-
-clientsList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-client-select]");
-  if (!button) return;
-  state.activeClientId = Number(button.dataset.clientSelect);
-  render();
-});
-
-activeClientSelect.addEventListener("change", (event) => {
-  state.activeClientId = Number(event.currentTarget.value);
-  render();
-});
-
-primaryGenerateButton.addEventListener("click", async () => {
-  const client = getActiveClient();
-  if (!client) return;
-
-  await runAction(`Generoidaan asiakkaalle ${client.businessName}...`, async () => {
-    const result = await api(`/api/clients/${client.id}/generate`, { method: "POST" });
-    if (result.lumixAction) {
-      lumixActionState.set(client.id, result.lumixAction);
-    }
-    setStatus(`Generointi lisätty jonoon (#${result.job.id}).`);
-    await refresh();
-  });
-});
-
-activeClientView.addEventListener("submit", async (event) => {
-  const intakeForm = event.target.closest("form[data-intake-form]");
-  if (intakeForm) {
-    event.preventDefault();
-
-    const clientId = Number(intakeForm.closest("[data-client-id]")?.dataset.clientId);
-    const raw = readForm(intakeForm);
-
-    await runAction("Tallennetaan yrityksen tietoja...", async () => {
-      await api(`/api/clients/${clientId}/intake`, {
-        method: "PUT",
-        body: JSON.stringify(raw)
-      });
-      setStatus("Yrityksen tiedot tallennettu.");
-      await refresh();
-    });
-    return;
-  }
-
-  const form = event.target.closest("form[data-target-form]");
-  if (!form) return;
-  event.preventDefault();
-
-  const clientId = Number(form.closest("[data-client-id]")?.dataset.clientId);
-  const raw = readForm(form);
-  const config = buildPublishConfig(raw);
-
-  await runAction(`Lisätään julkaisukanava asiakkaalle #${clientId}...`, async () => {
-    await api(`/api/clients/${clientId}/publish-targets`, {
-      method: "POST",
       body: JSON.stringify({
-        name: raw.name,
-        platform: raw.platform,
-        autoPublish: Boolean(raw.autoPublish),
-        config
+        businessName: deriveBusinessNameFromBrief(brief),
+        description: brief,
+        autoGenerate: false
       })
     });
-    form.reset();
-    await refresh();
+    clientId = result.client.id;
+    state.activeClientId = clientId;
+    state.storage.activeClientId = clientId;
+  } else if (activeClient?.description !== brief) {
+    await api(`/api/clients/${clientId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ description: brief })
+    });
+  }
+
+  const refreshed = clients.find((client) => client.id === clientId) || activeClient || null;
+  await api(`/api/clients/${clientId}/intake`, {
+    method: "PUT",
+    body: JSON.stringify(buildMinimalIntakePayload(refreshed, brief))
   });
-});
 
-activeClientView.addEventListener("click", async (event) => {
-  const emptyActionButton = event.target.closest("button[data-empty-action='lumix']");
-  if (emptyActionButton) {
-    activateLumix();
+  const recommendationResult = await api(`/api/clients/${clientId}/recommendation`, { method: "POST" });
+
+  updateClientUiState(clientId, {
+    activeStep: "strategy",
+    businessBrief: brief,
+    strategyDraft: normalizeStrategy(recommendationResult.client?.strategyRecommendation || recommendationResult.recommendation),
+    strategyAccepted: false,
+    strategyEditing: false,
+    generationComplete: false,
+    previewApproved: false,
+    published: false,
+    publishedUrl: ""
+  });
+
+  state.storage.draftBrief = "";
+  writeStorage();
+  await refreshBootstrap();
+  setStatus("Business brief saved and strategy created.", "success");
+  render();
+}
+
+function readStrategyForm(form) {
+  const raw = Object.fromEntries(new FormData(form).entries());
+  return {
+    positioning: String(raw.positioning || "").trim(),
+    primaryOffer: String(raw.primaryOffer || "").trim(),
+    primaryAudience: String(raw.primaryAudience || "").trim(),
+    ctaStrategy: String(raw.ctaStrategy || "").trim(),
+    homepageStructure: String(raw.homepageStructure || "")
+      .split(/\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function startGenerateLoading(clientId) {
+  stopGenerateLoading();
+  state.loadingGenerate = {
+    clientId,
+    message: GENERATE_MESSAGES[0],
+    index: 0
+  };
+  state.loadingTimer = window.setInterval(() => {
+    if (!state.loadingGenerate) return;
+    const nextIndex = (state.loadingGenerate.index + 1) % GENERATE_MESSAGES.length;
+    state.loadingGenerate = {
+      ...state.loadingGenerate,
+      index: nextIndex,
+      message: GENERATE_MESSAGES[nextIndex]
+    };
+    renderCurrentStep();
+  }, 700);
+}
+
+function stopGenerateLoading() {
+  if (state.loadingTimer) {
+    window.clearInterval(state.loadingTimer);
+    state.loadingTimer = null;
+  }
+  state.loadingGenerate = null;
+}
+
+function updatePublishDraftFromForm(clientId, raw) {
+  updateClientUiState(clientId, {
+    publishDraft: {
+      platform: String(raw.platform || "wordpress"),
+      name: String(raw.name || "Primary site"),
+      baseUrl: String(raw.baseUrl || ""),
+      username: String(raw.username || ""),
+      applicationPassword: String(raw.applicationPassword || ""),
+      siteUrl: String(raw.siteUrl || ""),
+      token: String(raw.token || ""),
+      collectionId: String(raw.collectionId || "")
+    }
+  });
+}
+
+function buildPublishConfig(raw) {
+  if (raw.platform === "webflow") {
+    return {
+      token: String(raw.token || "").trim(),
+      collectionId: String(raw.collectionId || "").trim(),
+      siteUrl: String(raw.siteUrl || "").trim(),
+      titleField: "name",
+      slugField: "slug",
+      contentField: "post-body",
+      excerptField: "summary",
+      keywordField: "keyword"
+    };
+  }
+
+  return {
+    baseUrl: String(raw.baseUrl || "").trim(),
+    username: String(raw.username || "").trim(),
+    applicationPassword: String(raw.applicationPassword || "").trim(),
+    status: "draft"
+  };
+}
+
+function getCurrentUiState() {
+  return getClientUiState(getActiveClient()?.id || null);
+}
+
+mainView.addEventListener("submit", async (event) => {
+  const briefForm = event.target.closest("form[data-brief-form]");
+  if (briefForm) {
+    event.preventDefault();
+    const brief = String(new FormData(briefForm).get("brief") || "").trim();
+    if (!brief) {
+      setStatus("Please describe your business before continuing.", "error");
+      return;
+    }
+
+    state.storage.draftBrief = brief;
+    writeStorage();
+
+    try {
+      setStatus("Saving your business brief...");
+      await submitBrief(brief);
+    } catch (error) {
+      setStatus(getFriendlyErrorMessage(error, "Saving the business brief failed."), "error");
+    }
     return;
   }
 
-  const guideOnlyButton = event.target.closest("button[data-guide]:not([data-action])");
-  if (guideOnlyButton) {
-    highlightGuideTarget(`[data-guide='${guideOnlyButton.dataset.guide}']`);
-    return;
-  }
-
-  const previewTabButton = event.target.closest("button[data-preview-tab]");
-  if (previewTabButton) {
+  const strategyForm = event.target.closest("form[data-strategy-form]");
+  if (strategyForm) {
+    event.preventDefault();
     const client = getActiveClient();
     if (!client) return;
-    previewTabState.set(client.id, previewTabButton.dataset.previewTab);
+
+    const strategyDraft = readStrategyForm(strategyForm);
+
+    try {
+      setStatus("Saving strategy...");
+      const result = await api(`/api/clients/${client.id}/strategy`, {
+        method: "PATCH",
+        body: JSON.stringify(strategyDraft)
+      });
+
+      updateClientUiState(client.id, {
+        strategyDraft: normalizeStrategy(result.client?.strategyRecommendation || strategyDraft),
+        strategyAccepted: true,
+        strategyEditing: false,
+        activeStep: "generate"
+      });
+
+      await refreshBootstrap();
+      setStatus("Strategy saved. Moving into content generation.", "success");
+      render();
+    } catch (error) {
+      setStatus(getFriendlyErrorMessage(error, "Saving strategy failed."), "error");
+    }
+    return;
+  }
+
+  const publishForm = event.target.closest("form[data-publish-target-form]");
+  if (publishForm) {
+    event.preventDefault();
+    const client = getActiveClient();
+    if (!client) return;
+
+    const raw = Object.fromEntries(new FormData(publishForm).entries());
+    updatePublishDraftFromForm(client.id, raw);
+
+    try {
+      setStatus("Connecting publish channel...");
+      await api(`/api/clients/${client.id}/publish-targets`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: String(raw.name || "").trim(),
+          platform: String(raw.platform || "wordpress"),
+          autoPublish: false,
+          config: buildPublishConfig(raw)
+        })
+      });
+
+      updateClientUiState(client.id, {
+        publishFormOpen: false,
+        publishReady: true,
+        activeStep: "publish"
+      });
+      await refreshBootstrap();
+      setStatus("Publish channel connected.", "success");
+      render();
+    } catch (error) {
+      setStatus(getFriendlyErrorMessage(error, "Connecting publish channel failed."), "error");
+    }
+  }
+});
+
+mainView.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action], [data-preview-tab]");
+  if (!button) return;
+
+  const client = getActiveClient();
+  const uiState = getCurrentUiState();
+
+  if (button.dataset.previewTab) {
+    updateClientUiState(client?.id || null, { previewTab: button.dataset.previewTab });
     render();
     return;
   }
 
-  const button = event.target.closest("button[data-action]");
-  if (!button) return;
-
-  const root = button.closest("[data-client-id]");
-  const clientId = Number(root?.dataset.clientId);
-  if (!clientId) return;
-
-  const client = state.bootstrap.clients.find((item) => item.id === clientId);
   const action = button.dataset.action;
 
-  if (action === "generate") {
-    await runAction(`Generoidaan asiakkaalle ${client.businessName}...`, async () => {
-      const result = await api(`/api/clients/${clientId}/generate-all`, { method: "POST" });
-      if (result.lumixAction) {
-        lumixActionState.set(clientId, result.lumixAction);
-      }
-      setStatus(`Sisältö generoitu asiakkaalle ${client.businessName}.`);
-      await refresh();
+  if (action === "accept-strategy" && client) {
+    updateClientUiState(client.id, {
+      strategyAccepted: true,
+      strategyEditing: false,
+      activeStep: "generate"
     });
+    render();
     return;
   }
 
-  if (action === "recommend") {
-    await runAction(`Muodostetaan suunta asiakkaalle ${client.businessName}...`, async () => {
-      const result = await api(`/api/clients/${clientId}/recommendation`, { method: "POST" });
-      if (result.lumixAction) {
-        lumixActionState.set(clientId, result.lumixAction);
-      }
-      setStatus(`Lumixin ehdotus päivitetty asiakkaalle ${client.businessName}.`);
-      await refresh();
+  if (action === "edit-strategy" && client) {
+    updateClientUiState(client.id, { strategyEditing: true });
+    render();
+    return;
+  }
+
+  if (action === "cancel-strategy-edit" && client) {
+    updateClientUiState(client.id, {
+      strategyEditing: false,
+      strategyDraft: normalizeStrategy(client.strategyRecommendation)
     });
+    render();
     return;
   }
 
-  if (action === "toggle-schedule") {
-    await runAction(
-      `${client.scheduleEnabled ? "Pysäytetään" : "Jatketaan"} ajastusta asiakkaalle ${client.businessName}...`,
-      async () => {
-        await api(`/api/clients/${clientId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ scheduleEnabled: !client.scheduleEnabled })
-        });
-        setStatus(
-          `${client.scheduleEnabled ? "Ajastus pysäytetty" : "Ajastus käynnistetty"} asiakkaalle ${client.businessName}.`
-        );
-        await refresh();
-      }
-    );
-    return;
-  }
+  if (action === "generate-content" && client) {
+    try {
+      startGenerateLoading(client.id);
+      render();
+      const [result] = await Promise.all([
+        api(`/api/clients/${client.id}/generate-all`, { method: "POST" }),
+        wait(2800)
+      ]);
 
-  if (action === "checkout") {
-    await runAction(`Avataan checkout asiakkaalle ${client.businessName}...`, async () => {
-      const result = await api(`/api/clients/${clientId}/checkout`, {
-        method: "POST",
-        body: JSON.stringify({ plan: client.plan })
+      stopGenerateLoading();
+      updateClientUiState(client.id, {
+        generationComplete: true,
+        previewApproved: false,
+        previewTab: uiState.previewTab || "landing",
+        activeStep: "preview"
       });
-      if (result.checkout.url) {
-        window.open(result.checkout.url, "_blank", "noopener");
-        setStatus("Stripe Checkout avattiin uuteen välilehteen.");
-      } else {
-        setStatus(result.checkout.message || "Stripe ei ole käytössä.");
-      }
-      await refresh();
-    });
+
+      state.bootstrap.clients = (state.bootstrap.clients || []).map((item) =>
+        item.id === client.id ? result.client : item
+      );
+      await refreshBootstrap();
+      setStatus("Content pack generated.", "success");
+      render();
+    } catch (error) {
+      stopGenerateLoading();
+      render();
+      setStatus(getFriendlyErrorMessage(error, "Generating content failed."), "error");
+    }
     return;
   }
 
-  if (action === "save-prompt") {
-    const textarea = root.querySelector("[data-prompt-editor]");
-    await runAction(`Tallennetaan ohje asiakkaalle ${client.businessName}...`, async () => {
-      await api(`/api/clients/${clientId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ customPrompt: textarea.value })
-      });
-      setStatus(`Ohje tallennettu asiakkaalle ${client.businessName}.`);
-      await refresh();
+  if (action === "approve-preview" && client) {
+    updateClientUiState(client.id, {
+      previewApproved: true,
+      activeStep: "publish"
     });
+    render();
     return;
   }
 
-  if (action === "publish-all") {
-    await runAction(`Julkaistaan asiakkaan ${client.businessName} sisältö...`, async () => {
-      const result = await api(`/api/clients/${clientId}/publish`, {
+  if (action === "go-back-generate" && client) {
+    updateClientUiState(client.id, { activeStep: "generate" });
+    render();
+    return;
+  }
+
+  if (action === "open-publish-form" && client) {
+    updateClientUiState(client.id, { publishFormOpen: true });
+    render();
+    return;
+  }
+
+  if (action === "publish-now" && client) {
+    try {
+      setStatus("Publishing your site...");
+      await api(`/api/clients/${client.id}/publish`, {
         method: "POST",
         body: JSON.stringify({})
       });
-      if (result.lumixAction) {
-        lumixActionState.set(clientId, result.lumixAction);
-      }
-      setStatus(`Julkaisu lisätty jonoon (#${result.job.id}).`);
-      await refresh();
-    });
+
+      const publishedUrl = getPublishUrl(client, uiState);
+      updateClientUiState(client.id, {
+        published: true,
+        publishedUrl,
+        activeStep: "publish"
+      });
+      await refreshBootstrap();
+      setStatus("Your site is live.", "success");
+      render();
+    } catch (error) {
+      setStatus(getFriendlyErrorMessage(error, "Publishing failed."), "error");
+    }
+  }
+});
+
+stepList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-step-nav]");
+  if (!button || state.loadingGenerate) return;
+
+  const targetStep = button.dataset.stepNav;
+  const client = getActiveClient();
+  const uiState = getCurrentUiState();
+  const reachableIndex = STEP_ORDER.indexOf(getDerivedStep(client, uiState));
+  const targetIndex = STEP_ORDER.indexOf(targetStep);
+
+  if (targetIndex === -1 || targetIndex > Math.max(reachableIndex, STEP_ORDER.indexOf(uiState.activeStep || "client"))) {
     return;
   }
 
-  if (action === "publish-target") {
-    await runAction(`Julkaistaan kohde asiakkaalle ${client.businessName}...`, async () => {
-      const result = await api(`/api/clients/${clientId}/publish`, {
-        method: "POST",
-        body: JSON.stringify({ targetId: Number(button.dataset.targetId) })
-      });
-      if (result.lumixAction) {
-        lumixActionState.set(clientId, result.lumixAction);
-      }
-      setStatus(`Julkaisu lisätty jonoon (#${result.job.id}).`);
-      await refresh();
-    });
-  }
-});
-
-lumixButton.addEventListener("click", () => {
-  activateLumix();
-});
-
-lumixCoach.addEventListener("submit", async (event) => {
-  const form = event.target.closest("form[data-lumix-form]");
-  if (!form) return;
-  event.preventDefault();
-
-  const clientId = Number(form.dataset.clientId);
-  const raw = readForm(form);
-
-  await runAction("Lumix miettii ideaa...", async () => {
-    const result = await api(`/api/clients/${clientId}/lumix-assist`, {
-      method: "POST",
-      body: JSON.stringify({ message: raw.message })
-    });
-
-    lumixAssistState.set(clientId, {
-      reply: result.assist?.reply || "",
-      suggestedUpdates: result.assist?.suggestedUpdates || null
-    });
-
-    form.reset();
-    renderCoach(getActiveClient());
+  updateClientUiState(client?.id || null, {
+    activeStep: targetStep
   });
+  render();
 });
 
-lumixCoach.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-coach-action]");
-  if (!button) return;
-  const action = button.dataset.coachAction;
-  const activeClient = getActiveClient();
-
-  if (action === "focus") {
-    highlightGuideTarget(button.dataset.target);
-    return;
-  }
-
-  if (action === "collapse") {
-    state.lumixHidden = true;
-    window.localStorage.setItem(lumixHiddenStorageKey, "1");
-    renderCoach(activeClient);
-    return;
-  }
-
-  if (action === "expand") {
-    state.lumixHidden = false;
-    window.localStorage.setItem(lumixHiddenStorageKey, "0");
-    renderCoach(activeClient);
-    return;
-  }
-
-  if (action === "apply-suggestion") {
-    const activeClient = getActiveClient();
-    if (!activeClient) return;
-
-    const assist = getLumixAssistState(activeClient.id);
-    const updates = assist.suggestedUpdates || {};
-
-    runAction("Lumix päivittää ehdotusta asiakkaalle...", async () => {
-      const intakePayload = buildIntakePayloadFromClient(activeClient, updates);
-      await api(`/api/clients/${activeClient.id}/intake`, {
-        method: "PUT",
-        body: JSON.stringify(intakePayload)
-      });
-
-      if (updates.customPrompt !== undefined) {
-        await api(`/api/clients/${activeClient.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ customPrompt: updates.customPrompt })
-        });
-      }
-
-      setStatus("Lumixin ehdotus lisättiin asiakkaan tietoihin.");
-      await refresh();
-    });
-    return;
-  }
-
-  if (action === "start-tour") {
-    state.lumixHidden = false;
-    window.localStorage.setItem(lumixHiddenStorageKey, "0");
-    state.tourActive = true;
-    state.tourStepIndex = 0;
-    render();
-    return;
-  }
-
-  if (action === "prev") {
-    state.tourStepIndex = Math.max(0, state.tourStepIndex - 1);
-    render();
-    return;
-  }
-
-  if (action === "next") {
-    const steps = getTourSteps(activeClient);
-    state.tourStepIndex = Math.min(steps.length - 1, state.tourStepIndex + 1);
-    render();
-    return;
-  }
-
-  if (action === "finish" || action === "stop") {
-    finishTour();
-    renderCoach(activeClient);
-  }
+clientSwitcher.addEventListener("change", () => {
+  const selectedId = Number(clientSwitcher.value || 0) || null;
+  state.activeClientId = selectedId;
+  state.storage.activeClientId = selectedId;
+  writeStorage();
+  render();
 });
 
-refresh().catch((error) => {
-  setStatus(getErrorMessage(error));
+logoutButton.addEventListener("click", async () => {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Ignore logout API failures and clear client state anyway.
+  }
+
+  stopGenerateLoading();
+  clearAuthenticated();
+  localStorage.removeItem(WORKFLOW_STORAGE_KEY);
+  redirectTo("/login");
 });
+
+newWebsiteButton?.addEventListener("click", () => {
+  redirectTo("/welcome?mode=new-client");
+});
+
+async function init() {
+  try {
+    setStatus("Loading workspace...");
+    await refreshBootstrap();
+    setStatus("");
+    render();
+  } catch (error) {
+    setStatus(getFriendlyErrorMessage(error, "Loading workspace failed."), "error");
+  }
+}
+
+init();

@@ -1,4 +1,15 @@
+import { clearAuthenticated, hasStoredAuth, markAuthenticated, redirectTo } from "./auth-state.js";
+
+if (hasStoredAuth() && window.location.pathname === "/login") {
+  redirectTo("/dashboard");
+}
+
 const statusBanner = document.getElementById("status-banner");
+
+function getPostAuthPath(bootstrap) {
+  const needsOnboarding = !bootstrap.user?.onboardingCompletedAt && !(bootstrap.clients || []).length;
+  return needsOnboarding ? "/welcome" : "/dashboard";
+}
 
 function setStatus(message) {
   statusBanner.textContent = message;
@@ -28,6 +39,8 @@ function readForm(formElement) {
 }
 
 async function runAction(pendingMessage, action) {
+  setStatus(pendingMessage);
+
   try {
     await action();
   } catch (error) {
@@ -39,10 +52,12 @@ async function refresh() {
   const bootstrap = await api("/api/bootstrap");
 
   if (bootstrap.authenticated) {
-    window.location.href = "/dashboard";
+    markAuthenticated();
+    redirectTo(getPostAuthPath(bootstrap));
     return;
   }
 
+  clearAuthenticated();
   setStatus("");
 }
 
@@ -50,13 +65,15 @@ document.getElementById("login-form").addEventListener("submit", async (event) =
   event.preventDefault();
   const form = event.currentTarget;
 
-  await runAction("", async () => {
+  await runAction("Logging in...", async () => {
     await api("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(readForm(form))
     });
+    const bootstrap = await api("/api/bootstrap");
+    markAuthenticated();
     form.reset();
-    window.location.href = "/dashboard";
+    redirectTo(getPostAuthPath(bootstrap));
   });
 });
 
